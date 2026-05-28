@@ -53,6 +53,29 @@ The SQLite database is auto-created at `./data/twitter-machine.db` on first requ
 3. See a tweet you want to react to? Go to **Generate**, paste it, pick mode, generate.
 4. Review candidates in the **Approval Queue**. Edit, approve, copy, post.
 
+## For collaborators (read this first)
+
+After `git clone` and `npm install`:
+
+**1. LLM access — each person sets up their own.** There are two ways; pick one:
+
+- **Claude subscription (no per-token cost):** install [Claude Code](https://claude.com/claude-code), run `claude` once to log in, and leave `ANTHROPIC_API_KEY` unset. Generation routes through your own subscription via `@anthropic-ai/claude-agent-sdk`. Note: rate-limited for heavy use.
+- **API key (pay-as-you-go):** create `.env.local` with `ANTHROPIC_API_KEY=sk-ant-...` from https://console.anthropic.com/. Best for higher volume.
+
+There is **no shared key in the repo** — `.env.local` is gitignored on purpose.
+
+**2. Data is local, not shared.** Voice samples, targets, drafts, and metrics live in `./data/twitter-machine.db`, which is gitignored. Everyone gets their own empty database. The schema auto-creates on first run. If you want a *shared* content pipeline (same queue + voice library for the whole team), migrate to a hosted Postgres — see "Going multiplayer" below.
+
+## Going multiplayer (shared content pipeline)
+
+The app is built on Drizzle, so moving from per-user SQLite to a shared Postgres is a contained change:
+
+1. Swap `better-sqlite3` for a Postgres driver in `src/lib/db.ts` and point at a hosted DB (Neon / Supabase).
+2. Translate the `ensureSchema()` DDL (or generate migrations with `drizzle-kit`).
+3. Add auth so drafts can be attributed to who created/approved them.
+
+Until then, treat the repo as shared *code*, with each person running their own local instance.
+
 ## When you get X API access
 
 Swap in a `TwitterClient` adapter (read = poll target accounts, post = auto-publish approved drafts). The DB schema is already shaped for it — the `drafts` table has `source_url`, `source_handle`, `scheduled_for`, and `status: posted` ready to use.
@@ -61,5 +84,5 @@ Swap in a `TwitterClient` adapter (read = poll target accounts, post = auto-publ
 
 - Next.js 16 (App Router) + TypeScript + Tailwind v4
 - Drizzle ORM + better-sqlite3 (zero-setup local DB)
-- Anthropic SDK (Sonnet 4.6 for generation)
+- `@anthropic-ai/claude-agent-sdk` (Sonnet 4.6 for generation; subscription or API-key auth)
 - Zod for input validation
