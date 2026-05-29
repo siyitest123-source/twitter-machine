@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
 import { getDb } from "@/lib/db";
 import { getTopPerformers } from "@/lib/performance";
@@ -6,6 +8,7 @@ import { buildDiscoveryPrompt, type Narrative } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
 
 const BodySchema = z.object({
+  accountId: z.number().int().positive(),
   tweets: z
     .array(
       z.object({
@@ -15,14 +18,6 @@ const BodySchema = z.object({
     )
     .min(2)
     .max(50),
-  saveSuggestionIds: z
-    .array(
-      z.object({
-        narrativeIndex: z.number().int().min(0),
-        suggestionIndex: z.number().int().min(0),
-      }),
-    )
-    .optional(),
 });
 
 function extractJson<T>(text: string): T {
@@ -43,13 +38,19 @@ export async function POST(request: Request) {
   const input = parsed.data;
 
   const db = getDb();
+  const account = await getAccount(db, input.accountId);
+  if (!account) {
+    return Response.json({ error: "unknown accountId" }, { status: 400 });
+  }
+
   const [samples, topPerformers] = await Promise.all([
-    db.select().from(voiceSamples),
-    getTopPerformers(db, 5),
+    db.select().from(voiceSamples).where(eq(voiceSamples.accountId, account.id)),
+    getTopPerformers(db, account.id, 5),
   ]);
 
   const { system, user } = buildDiscoveryPrompt({
     voiceSamples: [...topPerformers, ...samples],
+    persona: account.persona,
     recentTweets: input.tweets,
   });
 
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
 }
 
 const SaveSchema = z.object({
+  accountId: z.number().int().positive(),
   suggestions: z
     .array(
       z.object({
@@ -89,10 +91,15 @@ export async function PUT(request: Request) {
     );
   }
   const db = getDb();
+  const account = await getAccount(db, parsed.data.accountId);
+  if (!account) {
+    return Response.json({ error: "unknown accountId" }, { status: 400 });
+  }
   const saved = await db
     .insert(drafts)
     .values(
       parsed.data.suggestions.map((s) => ({
+        accountId: account.id,
         type: "original" as const,
         text: s.text,
         angle: s.angle ?? null,

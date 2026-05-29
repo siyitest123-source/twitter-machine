@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 
 type Candidate = { text: string; angle: string };
 type Mode = "reply" | "qrt" | "original";
 
 export default function GeneratePage() {
+  const { currentId } = useAccount();
   const [mode, setMode] = useState<Mode>("reply");
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceText, setSourceText] = useState("");
@@ -28,6 +31,7 @@ export default function GeneratePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountId: currentId,
           type: mode,
           sourceUrl: sourceUrl || undefined,
           sourceText: sourceText || undefined,
@@ -55,7 +59,10 @@ export default function GeneratePage() {
   }
 
   const ready =
-    mode === "original" ? topic.trim().length > 0 : sourceText.trim().length > 0;
+    (mode === "original" ? topic.trim().length > 0 : sourceText.trim().length > 0) &&
+    currentId !== null;
+
+  if (currentId === null) return <NoAccount />;
 
   return (
     <div className="p-10 max-w-3xl">

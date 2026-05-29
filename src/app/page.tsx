@@ -2,20 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 
 type Counts = { status: string; count: number }[];
 
 export default function Dashboard() {
+  const { currentId, current } = useAccount();
   const [counts, setCounts] = useState<Counts>([]);
   const [voiceCount, setVoiceCount] = useState(0);
   const [targetCount, setTargetCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (currentId === null) return;
+    setLoading(true);
     Promise.all([
-      fetch("/api/drafts?status=all&limit=1").then((r) => r.json()),
-      fetch("/api/voice").then((r) => r.json()),
-      fetch("/api/targets").then((r) => r.json()),
+      fetch(`/api/drafts?status=all&limit=1&accountId=${currentId}`).then((r) =>
+        r.json(),
+      ),
+      fetch(`/api/voice?accountId=${currentId}`).then((r) => r.json()),
+      fetch(`/api/targets?accountId=${currentId}`).then((r) => r.json()),
     ])
       .then(([d, v, t]) => {
         setCounts(d.counts ?? []);
@@ -23,15 +30,19 @@ export default function Dashboard() {
         setTargetCount(t.targets?.length ?? 0);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [currentId]);
 
   const byStatus = (s: string) =>
     counts.find((c) => c.status === s)?.count ?? 0;
+
+  if (currentId === null) return <NoAccount />;
 
   return (
     <div className="p-10 max-w-5xl">
       <h1 className="text-3xl font-semibold mb-1">Dashboard</h1>
       <p className="text-muted mb-8">
+        Working on{" "}
+        <span className="text-foreground font-medium">@{current?.handle}</span>.
         Paste tweets in. Get drafts out. Approve and copy to post.
       </p>
 

@@ -1,18 +1,26 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { resolveAccountId } from "@/lib/accounts";
 import { getDb } from "@/lib/db";
 import { targetAccounts } from "@/lib/schema";
 
-export async function GET() {
+export async function GET(request: Request) {
   const db = getDb();
+  const url = new URL(request.url);
+  const accountId = await resolveAccountId(db, url.searchParams.get("accountId"));
+  if (accountId === null) {
+    return Response.json({ error: "valid accountId required" }, { status: 400 });
+  }
   const rows = await db
     .select()
     .from(targetAccounts)
+    .where(eq(targetAccounts.accountId, accountId))
     .orderBy(desc(targetAccounts.createdAt));
   return Response.json({ targets: rows });
 }
 
 const PostSchema = z.object({
+  accountId: z.number().int().positive(),
   handle: z
     .string()
     .min(1)
@@ -31,12 +39,17 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const handle = parsed.data.handle.replace(/^@/, "");
   const db = getDb();
+  const accountId = await resolveAccountId(db, parsed.data.accountId);
+  if (accountId === null) {
+    return Response.json({ error: "unknown accountId" }, { status: 400 });
+  }
+  const handle = parsed.data.handle.replace(/^@/, "");
   try {
     const [row] = await db
       .insert(targetAccounts)
       .values({
+        accountId,
         handle,
         notes: parsed.data.notes ?? null,
         engagementMode: parsed.data.engagementMode ?? "engage",
@@ -47,7 +60,7 @@ export async function POST(request: Request) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("UNIQUE")) {
       return Response.json(
-        { error: "handle already exists" },
+        { error: "this account already tracks that handle" },
         { status: 409 },
       );
     }

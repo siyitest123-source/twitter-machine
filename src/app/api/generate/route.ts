@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
 import { getDb } from "@/lib/db";
 import { getTopPerformers } from "@/lib/performance";
@@ -6,6 +8,7 @@ import { buildGenerationPrompt, type DraftType } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
 
 const BodySchema = z.object({
+  accountId: z.number().int().positive(),
   type: z.enum(["reply", "qrt", "original"]),
   sourceUrl: z.string().url().optional().or(z.literal("").transform(() => undefined)),
   sourceText: z.string().max(4000).optional(),
@@ -50,17 +53,26 @@ export async function POST(request: Request) {
   }
 
   const db = getDb();
+  const account = await getAccount(db, input.accountId);
+  if (!account) {
+    return Response.json({ error: "unknown accountId" }, { status: 400 });
+  }
+
   const [samples, topPerformers] = await Promise.all([
-    db.select().from(voiceSamples),
-    getTopPerformers(db, 5),
+    db
+      .select()
+      .from(voiceSamples)
+      .where(eq(voiceSamples.accountId, account.id)),
+    getTopPerformers(db, account.id, 5),
   ]);
   // Posts that actually performed get folded into the voice pool so the
-  // generator leans toward what worked.
+  // generator leans toward what worked — scoped to this account only.
   const voicePool = [...topPerformers, ...samples];
 
   const { system, user } = buildGenerationPrompt({
     type: input.type as DraftType,
     voiceSamples: voicePool,
+    persona: account.persona,
     sourceText: input.sourceText,
     sourceHandle: input.sourceHandle,
     topic: input.topic,
@@ -91,6 +103,7 @@ export async function POST(request: Request) {
       .insert(drafts)
       .values(
         modelOut.candidates.map((c) => ({
+          accountId: account.id,
           type: input.type,
           text: c.text,
           angle: c.angle,

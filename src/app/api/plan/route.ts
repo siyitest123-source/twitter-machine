@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
 import { getDb } from "@/lib/db";
 import { getTopPerformers } from "@/lib/performance";
@@ -6,6 +8,7 @@ import { buildWeeklyPlanPrompt, type PlannedPost } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
 
 const BodySchema = z.object({
+  accountId: z.number().int().positive(),
   themes: z.array(z.string().min(1).max(200)).min(1).max(15),
   avoid: z.array(z.string().min(1).max(200)).max(15).optional(),
   postsPerDay: z.number().int().min(1).max(8).optional(),
@@ -50,13 +53,19 @@ export async function POST(request: Request) {
   const postsPerDay = input.postsPerDay ?? 3;
 
   const db = getDb();
+  const account = await getAccount(db, input.accountId);
+  if (!account) {
+    return Response.json({ error: "unknown accountId" }, { status: 400 });
+  }
+
   const [samples, topPerformers] = await Promise.all([
-    db.select().from(voiceSamples),
-    getTopPerformers(db, 5),
+    db.select().from(voiceSamples).where(eq(voiceSamples.accountId, account.id)),
+    getTopPerformers(db, account.id, 5),
   ]);
 
   const { system, user } = buildWeeklyPlanPrompt({
     voiceSamples: [...topPerformers, ...samples],
+    persona: account.persona,
     themes: input.themes,
     avoid: input.avoid,
     postsPerDay,
@@ -87,6 +96,7 @@ export async function POST(request: Request) {
       .insert(drafts)
       .values(
         posts.map((p) => ({
+          accountId: account.id,
           type: p.type === "thread" ? ("thread" as const) : ("original" as const),
           text: p.text,
           threadParts:

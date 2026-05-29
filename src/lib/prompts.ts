@@ -16,9 +16,15 @@ function selectVoiceSamples(samples: VoiceSample[], k = 15): VoiceSample[] {
   return shuffled.slice(0, k);
 }
 
+function personaBlock(persona?: string | null): string {
+  if (!persona || !persona.trim()) return "";
+  return `\n<account-persona>\nThis account's role, focus, and tone:\n${persona.trim()}\n</account-persona>\n`;
+}
+
 export function buildGenerationPrompt(args: {
   type: DraftType;
   voiceSamples: VoiceSample[];
+  persona?: string | null;
   sourceText?: string;
   sourceHandle?: string;
   topic?: string;
@@ -34,7 +40,7 @@ export function buildGenerationPrompt(args: {
     : "(no voice samples available — write in a sharp, opinionated, conversational crypto-native voice without crypto-bro cliches)";
 
   const system = `You are a ghostwriter for a crypto/DeFi-focused Twitter account. You write in the user's exact voice, learned from their past tweets below. You generate engagement content (replies, quote-tweets, originals) that sounds like them — never like AI, never like a generic engagement bot.
-
+${personaBlock(args.persona)}
 <voice-samples>
 ${voiceBlock}
 </voice-samples>
@@ -92,6 +98,7 @@ If you're refusing to engage (scam/shill detected), use:
 
 export type WeeklyPlanInput = {
   voiceSamples: VoiceSample[];
+  persona?: string | null;
   themes: string[];
   avoid?: string[];
   postsPerDay?: number;
@@ -120,7 +127,7 @@ export function buildWeeklyPlanPrompt(args: WeeklyPlanInput): {
     : "(no voice samples — write in a sharp, opinionated, crypto-native voice without cliches)";
 
   const system = `You are a content planner for a crypto/DeFi Twitter account. Plan a week of original posts in the user's exact voice. Mix formats: hot takes, observations, data points, contrarian angles, and threads (only when a topic genuinely deserves multiple tweets).
-
+${personaBlock(args.persona)}
 <voice-samples>
 ${voiceBlock}
 </voice-samples>
@@ -169,6 +176,7 @@ For threads, use type: "thread", text: lead tweet, thread_continuation: array of
 
 export type DiscoveryInput = {
   voiceSamples: VoiceSample[];
+  persona?: string | null;
   recentTweets: { handle?: string; text: string }[];
 };
 
@@ -194,7 +202,7 @@ export function buildDiscoveryPrompt(args: DiscoveryInput): {
     : "(no voice samples)";
 
   const system = `You analyze a feed of recent crypto/DeFi tweets to identify what narratives are forming, then suggest proactive original posts the user could publish to ride or counter each narrative — all in the user's voice.
-
+${personaBlock(args.persona)}
 <voice-samples>
 ${voiceBlock}
 </voice-samples>

@@ -1,26 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 import type { TargetAccount } from "@/lib/schema";
 
 type Mode = "engage" | "monitor" | "amplify";
 
 export default function TargetsPage() {
+  const { currentId } = useAccount();
   const [targets, setTargets] = useState<TargetAccount[]>([]);
   const [handle, setHandle] = useState("");
   const [notes, setNotes] = useState("");
   const [mode, setMode] = useState<Mode>("engage");
   const [err, setErr] = useState<string | null>(null);
 
-  async function load() {
-    const r = await fetch("/api/targets");
+  const load = useCallback(async () => {
+    if (currentId === null) return;
+    const r = await fetch(`/api/targets?accountId=${currentId}`);
     const d = await r.json();
     setTargets(d.targets ?? []);
-  }
+  }, [currentId]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -28,7 +32,12 @@ export default function TargetsPage() {
     const r = await fetch("/api/targets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handle, notes, engagementMode: mode }),
+      body: JSON.stringify({
+        accountId: currentId,
+        handle,
+        notes,
+        engagementMode: mode,
+      }),
     });
     if (r.ok) {
       setHandle("");
@@ -55,6 +64,8 @@ export default function TargetsPage() {
     await fetch(`/api/targets/${id}`, { method: "DELETE" });
     setTargets((ts) => ts.filter((t) => t.id !== id));
   }
+
+  if (currentId === null) return <NoAccount />;
 
   return (
     <div className="p-10 max-w-3xl">

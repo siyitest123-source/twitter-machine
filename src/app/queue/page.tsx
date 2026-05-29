@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 import type { Draft } from "@/lib/schema";
 
 type Status = "pending" | "approved" | "rejected" | "posted" | "all";
@@ -8,23 +10,30 @@ type Status = "pending" | "approved" | "rejected" | "posted" | "all";
 const STATUS_TABS: Status[] = ["pending", "approved", "posted", "rejected"];
 
 export default function QueuePage() {
+  const { currentId } = useAccount();
   const [status, setStatus] = useState<Status>("pending");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [counts, setCounts] = useState<{ status: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load(s: Status = status) {
-    setLoading(true);
-    const r = await fetch(`/api/drafts?status=${s}&limit=200`);
-    const d = await r.json();
-    setDrafts(d.drafts ?? []);
-    setCounts(d.counts ?? []);
-    setLoading(false);
-  }
+  const load = useCallback(
+    async (s: Status = status) => {
+      if (currentId === null) return;
+      setLoading(true);
+      const r = await fetch(
+        `/api/drafts?status=${s}&accountId=${currentId}&limit=200`,
+      );
+      const d = await r.json();
+      setDrafts(d.drafts ?? []);
+      setCounts(d.counts ?? []);
+      setLoading(false);
+    },
+    [status, currentId],
+  );
 
   useEffect(() => {
     load(status);
-  }, [status]);
+  }, [load, status]);
 
   async function patch(id: number, body: Partial<Draft>) {
     const r = await fetch(`/api/drafts/${id}`, {
@@ -51,6 +60,8 @@ export default function QueuePage() {
 
   const countFor = (s: string) =>
     counts.find((c) => c.status === s)?.count ?? 0;
+
+  if (currentId === null) return <NoAccount />;
 
   return (
     <div className="p-10 max-w-3xl">

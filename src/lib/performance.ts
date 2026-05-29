@@ -33,6 +33,7 @@ export function engagementRate(d: {
  */
 export async function getTopPerformers(
   db: ReturnType<typeof getDb>,
+  accountId: number,
   limit = 5,
 ): Promise<VoiceSample[]> {
   const posted = await db
@@ -40,6 +41,7 @@ export async function getTopPerformers(
     .from(drafts)
     .where(
       and(
+        eq(drafts.accountId, accountId),
         eq(drafts.status, "posted"),
         gt(drafts.metricsUpdatedAt, 0),
       ),
@@ -55,6 +57,7 @@ export async function getTopPerformers(
   return ranked.map(
     (d: Draft): VoiceSample => ({
       id: -d.id, // negative to avoid colliding with real voice_samples ids
+      accountId: d.accountId,
       text: d.text,
       context: `high-performer (${engagementScore(d)} pts)`,
       createdAt: d.postedAt ?? d.createdAt,

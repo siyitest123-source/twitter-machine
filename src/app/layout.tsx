@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
+import { AccountProvider } from "@/lib/account-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Twitter Machine",
-  description: "Twitter content + engagement machine — manual mode",
+  title: "Twitter Factory",
+  description: "Multi-account Twitter content + engagement factory — manual mode",
 };
 
 export default function RootLayout({
@@ -29,10 +30,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <div className="flex min-h-screen">
-          <Nav />
-          <main className="flex-1 min-w-0">{children}</main>
-        </div>
+        <AccountProvider>
+          <div className="flex min-h-screen">
+            <Nav />
+            <main className="flex-1 min-w-0">{children}</main>
+          </div>
+        </AccountProvider>
       </body>
     </html>
   );

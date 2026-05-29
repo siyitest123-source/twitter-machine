@@ -1,26 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 import type { VoiceSample } from "@/lib/schema";
 
 export default function VoicePage() {
+  const { currentId } = useAccount();
   const [samples, setSamples] = useState<VoiceSample[]>([]);
   const [bulk, setBulk] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
+    if (currentId === null) return;
     setLoading(true);
-    const r = await fetch("/api/voice");
+    const r = await fetch(`/api/voice?accountId=${currentId}`);
     const d = await r.json();
     setSamples(d.samples ?? []);
     setLoading(false);
-  }
+  }, [currentId]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   async function save() {
     const lines = bulk
@@ -33,7 +37,10 @@ export default function VoicePage() {
     const r = await fetch("/api/voice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ samples: lines.map((text) => ({ text })) }),
+      body: JSON.stringify({
+        accountId: currentId,
+        samples: lines.map((text) => ({ text })),
+      }),
     });
     if (r.ok) {
       const d = await r.json();
@@ -50,6 +57,8 @@ export default function VoicePage() {
     await fetch(`/api/voice/${id}`, { method: "DELETE" });
     setSamples((s) => s.filter((x) => x.id !== id));
   }
+
+  if (currentId === null) return <NoAccount />;
 
   return (
     <div className="p-10 max-w-3xl">

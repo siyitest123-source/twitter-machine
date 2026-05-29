@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 
 type Suggestion = {
   text: string;
@@ -41,6 +43,7 @@ function parseTweets(raw: string): { handle?: string; text: string }[] {
 }
 
 export default function DiscoverPage() {
+  const { currentId } = useAccount();
   const [raw, setRaw] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -62,7 +65,7 @@ export default function DiscoverPage() {
       const r = await fetch("/api/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tweets: parsed }),
+        body: JSON.stringify({ accountId: currentId, tweets: parsed }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -98,7 +101,7 @@ export default function DiscoverPage() {
     const r = await fetch("/api/discover", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ suggestions: items }),
+      body: JSON.stringify({ accountId: currentId, suggestions: items }),
     });
     if (r.ok) {
       const d = await r.json();
@@ -106,6 +109,8 @@ export default function DiscoverPage() {
       setSelected(new Set());
     }
   }
+
+  if (currentId === null) return <NoAccount />;
 
   return (
     <div className="p-10 max-w-4xl">

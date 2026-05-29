@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 
 type PlannedPost = {
   day_offset: number;
@@ -26,6 +28,7 @@ function dayLabel(startISO: string, offset: number): string {
 }
 
 export default function PlanPage() {
+  const { currentId } = useAccount();
   const [themes, setThemes] = useState("");
   const [avoid, setAvoid] = useState("");
   const [postsPerDay, setPostsPerDay] = useState(3);
@@ -46,6 +49,7 @@ export default function PlanPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountId: currentId,
           themes: themes
             .split("\n")
             .map((s) => s.trim())
@@ -73,7 +77,9 @@ export default function PlanPage() {
     setLoading(false);
   }
 
-  const ready = themes.trim().length > 0 && !loading;
+  const ready = themes.trim().length > 0 && !loading && currentId !== null;
+
+  if (currentId === null) return <NoAccount />;
 
   const byDay: Record<number, PlannedPost[]> = {};
   for (const p of posts) {

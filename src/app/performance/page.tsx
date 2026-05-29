@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 import type { Draft } from "@/lib/schema";
 
 type Metrics = {
@@ -19,20 +21,24 @@ function rate(m: Metrics): number | null {
 }
 
 export default function PerformancePage() {
+  const { currentId } = useAccount();
   const [posts, setPosts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
+    if (currentId === null) return;
     setLoading(true);
-    const r = await fetch("/api/drafts?status=posted&limit=500");
+    const r = await fetch(
+      `/api/drafts?status=posted&accountId=${currentId}&limit=500`,
+    );
     const d = await r.json();
     setPosts(d.drafts ?? []);
     setLoading(false);
-  }
+  }, [currentId]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const ranked = useMemo(
     () => [...posts].sort((a, b) => score(b) - score(a)),
@@ -91,12 +97,15 @@ export default function PerformancePage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        accountId: currentId,
         samples: [
           { text: p.text, context: `high-performer (${score(p)} pts)` },
         ],
       }),
     });
   }
+
+  if (currentId === null) return <NoAccount />;
 
   return (
     <div className="p-10 max-w-4xl">

@@ -7,10 +7,28 @@ const DB_PATH = resolve(process.cwd(), "data", "twitter-machine.db");
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+function columnNames(sqlite: Database.Database, table: string): Set<string> {
+  const cols = sqlite
+    .prepare(`PRAGMA table_info(${table})`)
+    .all() as { name: string }[];
+  return new Set(cols.map((c) => c.name));
+}
+
 function ensureSchema(sqlite: Database.Database) {
+  // Fresh-install shapes. CREATE IF NOT EXISTS is a no-op for existing
+  // installs; the migration block below upgrades those in place.
   sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      handle TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      persona TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE IF NOT EXISTS voice_samples (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
       text TEXT NOT NULL,
       context TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -18,14 +36,17 @@ function ensureSchema(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS target_accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      handle TEXT NOT NULL UNIQUE,
+      account_id INTEGER,
+      handle TEXT NOT NULL,
       notes TEXT,
       engagement_mode TEXT NOT NULL DEFAULT 'engage',
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(account_id, handle)
     );
 
     CREATE TABLE IF NOT EXISTS drafts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
       type TEXT NOT NULL,
       text TEXT NOT NULL,
       thread_parts TEXT,
@@ -49,22 +70,114 @@ function ensureSchema(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_drafts_created_at ON drafts(created_at);
     CREATE INDEX IF NOT EXISTS idx_drafts_scheduled_for ON drafts(scheduled_for);
   `);
+  // NOTE: account_id indexes are created at the end of migrateToMultiAccount,
+  // after the columns are guaranteed to exist (an existing install won't have
+  // them yet at this point).
 
-  // Idempotent migrations for installs created before later columns existed.
-  const cols = sqlite
-    .prepare("PRAGMA table_info(drafts)")
-    .all() as { name: string }[];
-  const have = new Set(cols.map((c) => c.name));
-  const addColumn = (name: string, ddl: string) => {
-    if (!have.has(name)) sqlite.exec(`ALTER TABLE drafts ADD COLUMN ${ddl}`);
+  // --- Pre-multi-account column migrations on drafts (metrics, threads) ---
+  const draftCols = columnNames(sqlite, "drafts");
+  const addDraftColumn = (name: string, ddl: string) => {
+    if (!draftCols.has(name)) {
+      sqlite.exec(`ALTER TABLE drafts ADD COLUMN ${ddl}`);
+      draftCols.add(name);
+    }
   };
-  addColumn("thread_parts", "thread_parts TEXT");
-  addColumn("posted_at", "posted_at INTEGER");
-  addColumn("impressions", "impressions INTEGER NOT NULL DEFAULT 0");
-  addColumn("likes", "likes INTEGER NOT NULL DEFAULT 0");
-  addColumn("retweets", "retweets INTEGER NOT NULL DEFAULT 0");
-  addColumn("replies", "replies INTEGER NOT NULL DEFAULT 0");
-  addColumn("metrics_updated_at", "metrics_updated_at INTEGER");
+  addDraftColumn("thread_parts", "thread_parts TEXT");
+  addDraftColumn("posted_at", "posted_at INTEGER");
+  addDraftColumn("impressions", "impressions INTEGER NOT NULL DEFAULT 0");
+  addDraftColumn("likes", "likes INTEGER NOT NULL DEFAULT 0");
+  addDraftColumn("retweets", "retweets INTEGER NOT NULL DEFAULT 0");
+  addDraftColumn("replies", "replies INTEGER NOT NULL DEFAULT 0");
+  addDraftColumn("metrics_updated_at", "metrics_updated_at INTEGER");
+
+  migrateToMultiAccount(sqlite);
+}
+
+/**
+ * Non-destructive migration to multi-account. Adds account_id to the data
+ * tables, folds any pre-existing (single-account) data into a "Main" account
+ * so nothing is lost, and rebuilds target_accounts to drop the global
+ * UNIQUE(handle) in favor of UNIQUE(account_id, handle).
+ */
+function migrateToMultiAccount(sqlite: Database.Database) {
+  const voiceCols = columnNames(sqlite, "voice_samples");
+  const targetCols = columnNames(sqlite, "target_accounts");
+  const draftCols = columnNames(sqlite, "drafts");
+
+  const voiceNeedsAccount = !voiceCols.has("account_id");
+  const draftsNeedsAccount = !draftCols.has("account_id");
+  const targetsNeedsRebuild = !targetCols.has("account_id");
+
+  if (voiceNeedsAccount) {
+    sqlite.exec("ALTER TABLE voice_samples ADD COLUMN account_id INTEGER");
+  }
+  if (draftsNeedsAccount) {
+    sqlite.exec("ALTER TABLE drafts ADD COLUMN account_id INTEGER");
+  }
+
+  // Is there any legacy data that predates accounts?
+  const hasOrphans =
+    (sqlite
+      .prepare("SELECT count(*) c FROM voice_samples WHERE account_id IS NULL")
+      .get() as { c: number }).c > 0 ||
+    (sqlite
+      .prepare("SELECT count(*) c FROM drafts WHERE account_id IS NULL")
+      .get() as { c: number }).c > 0 ||
+    (targetsNeedsRebuild &&
+      (sqlite.prepare("SELECT count(*) c FROM target_accounts").get() as {
+        c: number;
+      }).c > 0);
+
+  const accountsCount = (
+    sqlite.prepare("SELECT count(*) c FROM accounts").get() as { c: number }
+  ).c;
+
+  let mainId: number | null = null;
+  if (accountsCount === 0 && hasOrphans) {
+    const row = sqlite
+      .prepare(
+        "INSERT INTO accounts (handle, display_name, persona) VALUES ('main', 'Main', NULL) RETURNING id",
+      )
+      .get() as { id: number };
+    mainId = row.id;
+  }
+
+  // Backfill orphan rows onto the Main account.
+  if (mainId !== null) {
+    sqlite
+      .prepare("UPDATE voice_samples SET account_id = ? WHERE account_id IS NULL")
+      .run(mainId);
+    sqlite
+      .prepare("UPDATE drafts SET account_id = ? WHERE account_id IS NULL")
+      .run(mainId);
+  }
+
+  // Rebuild target_accounts to drop UNIQUE(handle) -> UNIQUE(account_id, handle).
+  if (targetsNeedsRebuild) {
+    const backfillId = mainId ?? "NULL";
+    sqlite.exec(`
+      ALTER TABLE target_accounts RENAME TO target_accounts_old;
+      CREATE TABLE target_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER,
+        handle TEXT NOT NULL,
+        notes TEXT,
+        engagement_mode TEXT NOT NULL DEFAULT 'engage',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        UNIQUE(account_id, handle)
+      );
+      INSERT INTO target_accounts (id, account_id, handle, notes, engagement_mode, created_at)
+        SELECT id, ${backfillId}, handle, notes, engagement_mode, created_at FROM target_accounts_old;
+      DROP TABLE target_accounts_old;
+    `);
+  }
+
+  // Now that account_id exists on every data table, create its indexes.
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_drafts_account ON drafts(account_id);
+    CREATE INDEX IF NOT EXISTS idx_voice_account ON voice_samples(account_id);
+    CREATE INDEX IF NOT EXISTS idx_targets_account ON target_accounts(account_id);
+  `);
 }
 
 export function getDb() {

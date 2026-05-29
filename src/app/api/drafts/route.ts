@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, isNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { resolveAccountId } from "@/lib/accounts";
 import { getDb } from "@/lib/db";
 import { drafts } from "@/lib/schema";
 
@@ -30,7 +31,12 @@ export async function GET(request: Request) {
   const limit = parsed.data.limit ?? 100;
   const db = getDb();
 
-  const conditions = [];
+  const accountId = await resolveAccountId(db, url.searchParams.get("accountId"));
+  if (accountId === null) {
+    return Response.json({ error: "valid accountId required" }, { status: 400 });
+  }
+
+  const conditions = [eq(drafts.accountId, accountId)];
   if (status !== "all") conditions.push(eq(drafts.status, status));
   if (unscheduled) {
     conditions.push(isNull(drafts.scheduledFor));
@@ -53,6 +59,7 @@ export async function GET(request: Request) {
   const counts = await db
     .select({ status: drafts.status, count: sql<number>`count(*)` })
     .from(drafts)
+    .where(eq(drafts.accountId, accountId))
     .groupBy(drafts.status);
 
   return Response.json({ drafts: rows, counts });

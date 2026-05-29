@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { NoAccount } from "@/components/NoAccount";
+import { useAccount } from "@/lib/account-context";
 import type { Draft } from "@/lib/schema";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -42,6 +44,7 @@ const STATUS_BORDER: Record<string, string> = {
 };
 
 export default function CalendarPage() {
+  const { currentId } = useAccount();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [scheduled, setScheduled] = useState<Draft[]>([]);
   const [backlog, setBacklog] = useState<Draft[]>([]);
@@ -52,20 +55,21 @@ export default function CalendarPage() {
   const weekEnd = addDays(weekStart, 7);
 
   const load = useCallback(async () => {
+    if (currentId === null) return;
     setLoading(true);
     const [sch, bk] = await Promise.all([
       fetch(
-        `/api/drafts?status=all&from=${unix(weekStart)}&to=${unix(weekEnd)}&limit=500`,
+        `/api/drafts?status=all&accountId=${currentId}&from=${unix(weekStart)}&to=${unix(weekEnd)}&limit=500`,
       ).then((r) => r.json()),
-      fetch(`/api/drafts?status=pending&unscheduled=1&limit=200`).then((r) =>
-        r.json(),
-      ),
+      fetch(
+        `/api/drafts?status=pending&accountId=${currentId}&unscheduled=1&limit=200`,
+      ).then((r) => r.json()),
     ]);
     setScheduled(sch.drafts ?? []);
     setBacklog(bk.drafts ?? []);
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekStart]);
+  }, [weekStart, currentId]);
 
   useEffect(() => {
     load();
@@ -110,6 +114,8 @@ export default function CalendarPage() {
     });
     load();
   }
+
+  if (currentId === null) return <NoAccount />;
 
   const now = new Date();
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));

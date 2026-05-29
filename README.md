@@ -1,6 +1,16 @@
-# Twitter Machine
+# Twitter Factory
 
-Crypto/DeFi Twitter content + engagement assistant. **Manual Mode**: you paste in target tweets, Claude generates drafts in your voice, you approve and copy to post on X manually. No X API required — swap in an API adapter later.
+Multi-account crypto/DeFi Twitter content + engagement assistant. **Manual Mode**: you paste in target tweets, Claude generates drafts in each account's voice, you approve and copy to post on X manually. No X API required — swap in an API adapter later.
+
+## Multiple accounts
+
+Twitter Factory hosts **many handles at once**, each fully isolated:
+
+- Pick the active account from the sidebar switcher (selection persists in your browser).
+- Each account has its **own** voice samples, persona, target list, drafts, calendar, and performance history. Nothing bleeds between accounts.
+- **Persona** (set on the Accounts page) is a short description of an account's role and tone, injected into every prompt on top of its voice samples — so a protocol's official account and your personal shitposting alt sound completely different even with the same engine.
+- Manage accounts at `/accounts`: create, rename, set persona, switch, or delete (deleting removes all of that account's data).
+- All data persists in the local SQLite DB across restarts. The schema auto-migrates; existing single-account data is folded into a "Main" account on first launch.
 
 ## What's built
 
