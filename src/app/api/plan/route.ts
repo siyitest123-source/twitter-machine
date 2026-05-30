@@ -9,8 +9,8 @@ import { drafts, voiceSamples } from "@/lib/schema";
 
 const BodySchema = z.object({
   accountId: z.number().int().positive(),
-  themes: z.array(z.string().min(1).max(200)).min(1).max(15),
-  avoid: z.array(z.string().min(1).max(200)).max(15).optional(),
+  brief: z.string().min(1).max(4000),
+  requirements: z.string().max(4000).optional(),
   postsPerDay: z.number().int().min(1).max(8).optional(),
   daysInWeek: z.number().int().min(1).max(14).optional(),
   startDateISO: z
@@ -66,8 +66,8 @@ export async function POST(request: Request) {
   const { system, user } = buildWeeklyPlanPrompt({
     voiceSamples: [...topPerformers, ...samples],
     persona: account.persona,
-    themes: input.themes,
-    avoid: input.avoid,
+    brief: input.brief,
+    requirements: input.requirements,
     postsPerDay,
     daysInWeek,
     startDateISO: startISO,

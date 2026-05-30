@@ -4,8 +4,19 @@ import { useState } from "react";
 import { NoAccount } from "@/components/NoAccount";
 import { useAccount } from "@/lib/account-context";
 
-type Candidate = { text: string; angle: string };
-type Mode = "reply" | "qrt" | "original";
+type Candidate = {
+  text: string;
+  thread_continuation: string[] | null;
+  angle: string;
+};
+type Mode = "reply" | "qrt" | "original" | "thread";
+
+const MODE_LABEL: Record<Mode, string> = {
+  reply: "Reply",
+  qrt: "Quote-retweet",
+  original: "Original",
+  thread: "Thread",
+};
 
 export default function GeneratePage() {
   const { currentId } = useAccount();
@@ -14,12 +25,14 @@ export default function GeneratePage() {
   const [sourceText, setSourceText] = useState("");
   const [sourceHandle, setSourceHandle] = useState("");
   const [topic, setTopic] = useState("");
-  const [angles, setAngles] = useState("");
+  const [brief, setBrief] = useState("");
   const [numCandidates, setNumCandidates] = useState(3);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+
+  const usesSource = mode === "reply" || mode === "qrt";
 
   async function generate() {
     setLoading(true);
@@ -37,9 +50,7 @@ export default function GeneratePage() {
           sourceText: sourceText || undefined,
           sourceHandle: sourceHandle || undefined,
           topic: topic || undefined,
-          angles: angles
-            ? angles.split(",").map((s) => s.trim()).filter(Boolean)
-            : undefined,
+          brief: brief.trim() || undefined,
           numCandidates,
           saveAsDrafts: true,
         }),
@@ -59,7 +70,7 @@ export default function GeneratePage() {
   }
 
   const ready =
-    (mode === "original" ? topic.trim().length > 0 : sourceText.trim().length > 0) &&
+    (usesSource ? sourceText.trim().length > 0 : topic.trim().length > 0) &&
     currentId !== null;
 
   if (currentId === null) return <NoAccount />;
@@ -68,13 +79,13 @@ export default function GeneratePage() {
     <div className="p-10 max-w-3xl">
       <h1 className="text-3xl font-semibold mb-1">Generate</h1>
       <p className="text-muted mb-6">
-        Paste a tweet from your target list (or compose an original).
+        Paste a tweet from your target list (or compose an original or thread).
         Candidates are saved to the Approval Queue.
       </p>
 
       <div className="bg-surface border border-border rounded-lg p-5 space-y-4">
-        <div className="flex gap-2">
-          {(["reply", "qrt", "original"] as const).map((m) => (
+        <div className="flex gap-2 flex-wrap">
+          {(["reply", "qrt", "original", "thread"] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -84,24 +95,24 @@ export default function GeneratePage() {
                   : "border-border text-muted hover:text-foreground"
               }`}
             >
-              {m === "reply"
-                ? "Reply"
-                : m === "qrt"
-                  ? "Quote-retweet"
-                  : "Original"}
+              {MODE_LABEL[m]}
             </button>
           ))}
         </div>
 
-        {mode === "original" ? (
+        {!usesSource ? (
           <div>
             <label className="block text-xs uppercase tracking-wider text-muted mb-1.5">
-              Topic / angle
+              {mode === "thread" ? "Thread topic" : "Topic / angle"}
             </label>
             <input
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. why restaking yields are about to compress"
+              placeholder={
+                mode === "thread"
+                  ? "e.g. why the next restaking cycle will compress everyone's yield"
+                  : "e.g. why restaking yields are about to compress"
+              }
               className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
             />
           </div>
@@ -143,19 +154,25 @@ export default function GeneratePage() {
                 className="w-full bg-background border border-border rounded-md p-3 text-sm resize-y focus:outline-none focus:border-accent"
               />
             </div>
-            <div>
-              <label className="block text-xs uppercase tracking-wider text-muted mb-1.5">
-                Desired angles (comma-separated, optional)
-              </label>
-              <input
-                value={angles}
-                onChange={(e) => setAngles(e.target.value)}
-                placeholder="skeptical, counter-take, add data"
-                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
-              />
-            </div>
           </>
         )}
+
+        <div>
+          <label className="block text-xs uppercase tracking-wider text-muted mb-1.5">
+            Comments / requirements for the content (optional)
+          </label>
+          <textarea
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+            rows={3}
+            placeholder={
+              mode === "thread"
+                ? "e.g. lead with a contrarian hook, keep total under 5 tweets, end with a question, no emojis"
+                : "e.g. be skeptical, add a data point, keep it under 200 chars, don't mention competitor names"
+            }
+            className="w-full bg-background border border-border rounded-md p-3 text-sm resize-y focus:outline-none focus:border-accent"
+          />
+        </div>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm">
@@ -215,12 +232,29 @@ export default function GeneratePage() {
 function CandidateCard({ candidate }: { candidate: Candidate }) {
   const [copied, setCopied] = useState(false);
   const len = candidate.text.length;
+  const thread = candidate.thread_continuation ?? [];
+  const isThread = thread.length > 0;
+
+  async function copyAll() {
+    const all = isThread
+      ? [candidate.text, ...thread].join("\n\n---\n\n")
+      : candidate.text;
+    await navigator.clipboard.writeText(all);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
     <div className="bg-surface border border-border rounded-md p-4">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-surface-2 text-muted">
           {candidate.angle}
         </span>
+        {isThread && (
+          <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-accent/20 text-accent">
+            thread · {thread.length + 1}
+          </span>
+        )}
         <span
           className={`text-xs ml-auto ${len > 280 ? "text-danger" : "text-muted"}`}
         >
@@ -230,15 +264,31 @@ function CandidateCard({ candidate }: { candidate: Candidate }) {
       <div className="whitespace-pre-wrap text-sm leading-relaxed mb-3">
         {candidate.text}
       </div>
+      {isThread && (
+        <ol className="mb-3 space-y-2 text-sm leading-relaxed">
+          {thread.map((t, i) => (
+            <li
+              key={i}
+              className="pl-3 border-l-2 border-border whitespace-pre-wrap"
+            >
+              <span className="text-xs text-muted mr-2 font-mono">
+                {String(i + 2).padStart(2, "0")}
+              </span>
+              {t}
+              <span
+                className={`ml-2 text-xs ${t.length > 280 ? "text-danger" : "text-muted"}`}
+              >
+                ({t.length}/280)
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
       <button
-        onClick={async () => {
-          await navigator.clipboard.writeText(candidate.text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
+        onClick={copyAll}
         className="text-xs px-2.5 py-1 border border-border rounded hover:border-accent"
       >
-        {copied ? "Copied!" : "Copy"}
+        {copied ? "Copied!" : isThread ? "Copy thread" : "Copy"}
       </button>
     </div>
   );

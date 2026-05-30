@@ -1,6 +1,6 @@
 import type { VoiceSample } from "./schema";
 
-export type DraftType = "reply" | "qrt" | "original";
+export type DraftType = "reply" | "qrt" | "original" | "thread";
 
 const TYPE_DESCRIPTIONS: Record<DraftType, string> = {
   reply:
@@ -8,6 +8,8 @@ const TYPE_DESCRIPTIONS: Record<DraftType, string> = {
   qrt: "A quote-retweet. You're adding your take ON TOP of the source. The reader sees your tweet first, then the source below. Make your angle land in the first sentence. 1-3 sentences.",
   original:
     "An original post (not in response to anything). Stand-alone take, observation, or insight. 1-3 sentences. No hashtags unless they're clearly natural.",
+  thread:
+    "A thread — multiple linked tweets that together tell one story, build one argument, or unpack one topic. Put the lead tweet in `text` and the continuation tweets (in order) in `thread_continuation`. The lead must hook on its own — never 'this is a thread about' or 'a thread 🧵'. Aim for 3–7 tweets total, each adding something new (no recap, no padding). Each tweet ≤ 280 chars.",
 };
 
 function selectVoiceSamples(samples: VoiceSample[], k = 15): VoiceSample[] {
@@ -28,7 +30,7 @@ export function buildGenerationPrompt(args: {
   sourceText?: string;
   sourceHandle?: string;
   topic?: string;
-  angles?: string[];
+  brief?: string;
   numCandidates?: number;
 }): { system: string; user: string } {
   const numCandidates = args.numCandidates ?? 3;
@@ -39,7 +41,7 @@ export function buildGenerationPrompt(args: {
         .join("\n")
     : "(no voice samples available — write in a sharp, opinionated, conversational crypto-native voice without crypto-bro cliches)";
 
-  const system = `You are a ghostwriter for a crypto/DeFi-focused Twitter account. You write in the user's exact voice, learned from their past tweets below. You generate engagement content (replies, quote-tweets, originals) that sounds like them — never like AI, never like a generic engagement bot.
+  const system = `You are a ghostwriter for a crypto/DeFi-focused Twitter account. You write in the user's exact voice, learned from their past tweets below. You generate engagement content (replies, quote-tweets, originals, threads) that sounds like them — never like AI, never like a generic engagement bot.
 ${personaBlock(args.persona)}
 <voice-samples>
 ${voiceBlock}
@@ -56,27 +58,37 @@ ${voiceBlock}
 - Have a take. Engagement that adds nothing dies.
 - Never mention contract addresses, token tickers as financial advice, or anything that could be read as a shill.
 - Keep replies under 240 characters unless the angle demands more.
+- For threads: each tweet ≤ 280 chars; the lead must work as a standalone hook.
 </voice-rules>
 
 <safety>
 If the source tweet is a scam, rugpull, obvious shill, or contains a contract address you don't recognize, output an empty candidates array and explain in the "skipped_reason" field. Never engage with potential scams.
 </safety>`;
 
-  const angleBlock = args.angles?.length
-    ? `\n<requested-angles>\n${args.angles.map((a) => `- ${a}`).join("\n")}\n</requested-angles>`
+  const briefBlock = args.brief?.trim()
+    ? `\n<user-brief>\nComments / requirements from the user for this generation. Treat as guidance from your client — follow them unless they conflict with the safety rules:\n${args.brief.trim()}\n</user-brief>`
     : "";
 
-  const sourceBlock =
-    args.type === "original"
-      ? args.topic
-        ? `<topic>\n${args.topic}\n</topic>`
-        : "<topic>(no topic specified — write a strong original take based on what's currently relevant in crypto/DeFi)</topic>"
-      : `<source-tweet>
+  const needsSource = args.type === "reply" || args.type === "qrt";
+  const sourceBlock = needsSource
+    ? `<source-tweet>
 ${args.sourceHandle ? `From @${args.sourceHandle.replace(/^@/, "")}:` : ""}
 ${args.sourceText ?? "(no source text provided)"}
-</source-tweet>${angleBlock}`;
+</source-tweet>${briefBlock}`
+    : args.topic
+      ? `<topic>\n${args.topic}\n</topic>${briefBlock}`
+      : `<topic>(no topic specified — write something strong about what's currently relevant in crypto/DeFi)</topic>${briefBlock}`;
 
-  const user = `Generate ${numCandidates} candidate ${args.type === "qrt" ? "quote-retweets" : args.type === "reply" ? "replies" : "original tweets"}.
+  const label =
+    args.type === "qrt"
+      ? "quote-retweets"
+      : args.type === "reply"
+        ? "replies"
+        : args.type === "thread"
+          ? "thread candidates"
+          : "original tweets";
+
+  const user = `Generate ${numCandidates} candidate ${label}.
 
 ${TYPE_DESCRIPTIONS[args.type]}
 
@@ -85,10 +97,16 @@ ${sourceBlock}
 Respond ONLY with valid JSON in this exact shape:
 {
   "candidates": [
-    { "text": "the tweet text", "angle": "short label for the angle, max 4 words" }
+    {
+      "text": "the tweet text (the LEAD tweet if this is a thread)",
+      "thread_continuation": ${args.type === "thread" ? '["tweet 2", "tweet 3", "..."]' : "null"},
+      "angle": "short label for the angle, max 4 words"
+    }
   ],
   "skipped_reason": null
 }
+
+${args.type === "thread" ? "For threads, thread_continuation MUST be a non-empty array (2–6 entries) of subsequent tweets in order. Do NOT prefix them with numbers like '2/' or '3/'." : "thread_continuation must be null for non-thread types."}
 
 If you're refusing to engage (scam/shill detected), use:
 { "candidates": [], "skipped_reason": "short reason" }`;
@@ -99,8 +117,8 @@ If you're refusing to engage (scam/shill detected), use:
 export type WeeklyPlanInput = {
   voiceSamples: VoiceSample[];
   persona?: string | null;
-  themes: string[];
-  avoid?: string[];
+  brief: string;
+  requirements?: string;
   postsPerDay?: number;
   daysInWeek?: number;
   startDateISO: string;
@@ -126,7 +144,7 @@ export function buildWeeklyPlanPrompt(args: WeeklyPlanInput): {
         .join("\n")
     : "(no voice samples — write in a sharp, opinionated, crypto-native voice without cliches)";
 
-  const system = `You are a content planner for a crypto/DeFi Twitter account. Plan a week of original posts in the user's exact voice. Mix formats: hot takes, observations, data points, contrarian angles, and threads (only when a topic genuinely deserves multiple tweets).
+  const system = `You are a content planner for a crypto/DeFi Twitter account. Plan a week of original posts in the user's exact voice from the brief below. Mix formats: hot takes, observations, data points, contrarian angles, and threads where a topic genuinely deserves multiple tweets.
 ${personaBlock(args.persona)}
 <voice-samples>
 ${voiceBlock}
@@ -139,18 +157,25 @@ ${voiceBlock}
 - No emojis unless the samples use them.
 - No "This is..." or "Honestly..." or any AI-tell openers.
 - Each post must have a take, an observation, or specific information. No engagement bait.
-- Threads only when the topic genuinely needs 3+ tweets. Default to single tweets.
+- Threads are encouraged for ideas that genuinely deserve 3+ tweets (deep takes, breakdowns, mini-essays). Default to single tweets for one-shot ideas.
+- For threads: each tweet ≤ 280 chars; the lead must work as a standalone hook. No "1/", "2/" numbering inside the text.
 - Vary the post types across the week — don't make every post the same shape.
 - Don't repeat angles across the week. Each post should feel distinct.
 - Never include contract addresses, token tickers as financial advice, or anything that reads as a shill.
 - Suggested posting hours should follow crypto-Twitter peak windows: 13-17 UTC weekdays, 14-22 UTC weekends.
-- Stay clearly inside the user's themes. Treat "avoid" topics as hard constraints.
+- Stay aligned with the user's content brief. Treat any "requirements / comments" from the user as guidance; if they include things to avoid, those are hard constraints.
 </rules>`;
 
   const days = args.daysInWeek ?? 7;
   const total = (args.postsPerDay ?? 3) * days;
-  const user = `Themes for the week: ${args.themes.join("; ")}
-${args.avoid?.length ? `Avoid (do NOT post about): ${args.avoid.join("; ")}` : ""}
+  const requirementsBlock = args.requirements?.trim()
+    ? `\n<user-requirements>\nComments / requirements from the user. Follow them unless they conflict with safety rules:\n${args.requirements.trim()}\n</user-requirements>\n`
+    : "";
+
+  const user = `<content-brief>
+${args.brief.trim()}
+</content-brief>
+${requirementsBlock}
 Days: ${days}
 Posts per day: ${args.postsPerDay ?? 3} (total ${total})
 Week starts: ${args.startDateISO}
@@ -169,7 +194,7 @@ Respond ONLY with valid JSON in this shape:
   ]
 }
 
-For threads, use type: "thread", text: lead tweet, thread_continuation: array of subsequent tweets in order. day_offset 0 = ${args.startDateISO}, day_offset 6 = end of week.`;
+For threads, use type: "thread", text: lead tweet, thread_continuation: array of 2-6 subsequent tweets in order (no "1/" / "2/" numbering inside the text). day_offset 0 = ${args.startDateISO}, day_offset 6 = end of week.`;
 
   return { system, user };
 }

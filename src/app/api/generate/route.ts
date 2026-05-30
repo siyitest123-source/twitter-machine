@@ -9,17 +9,21 @@ import { drafts, voiceSamples } from "@/lib/schema";
 
 const BodySchema = z.object({
   accountId: z.number().int().positive(),
-  type: z.enum(["reply", "qrt", "original"]),
+  type: z.enum(["reply", "qrt", "original", "thread"]),
   sourceUrl: z.string().url().optional().or(z.literal("").transform(() => undefined)),
   sourceText: z.string().max(4000).optional(),
   sourceHandle: z.string().max(64).optional(),
-  topic: z.string().max(500).optional(),
-  angles: z.array(z.string().max(120)).max(5).optional(),
+  topic: z.string().max(2000).optional(),
+  brief: z.string().max(2000).optional(),
   numCandidates: z.number().int().min(1).max(5).optional(),
   saveAsDrafts: z.boolean().optional(),
 });
 
-type Candidate = { text: string; angle: string };
+type Candidate = {
+  text: string;
+  thread_continuation: string[] | null;
+  angle: string;
+};
 type ModelResponse = {
   candidates: Candidate[];
   skipped_reason: string | null;
@@ -45,7 +49,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  if (input.type !== "original" && !input.sourceText) {
+  if ((input.type === "reply" || input.type === "qrt") && !input.sourceText) {
     return Response.json(
       { error: "sourceText required for reply/qrt" },
       { status: 400 },
@@ -76,7 +80,7 @@ export async function POST(request: Request) {
     sourceText: input.sourceText,
     sourceHandle: input.sourceHandle,
     topic: input.topic,
-    angles: input.angles,
+    brief: input.brief,
     numCandidates: input.numCandidates ?? 3,
   });
 
@@ -106,6 +110,10 @@ export async function POST(request: Request) {
           accountId: account.id,
           type: input.type,
           text: c.text,
+          threadParts:
+            input.type === "thread" && c.thread_continuation?.length
+              ? JSON.stringify(c.thread_continuation)
+              : null,
           angle: c.angle,
           sourceUrl: input.sourceUrl ?? null,
           sourceText: input.sourceText ?? null,

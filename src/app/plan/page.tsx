@@ -29,8 +29,8 @@ function dayLabel(startISO: string, offset: number): string {
 
 export default function PlanPage() {
   const { currentId } = useAccount();
-  const [themes, setThemes] = useState("");
-  const [avoid, setAvoid] = useState("");
+  const [brief, setBrief] = useState("");
+  const [requirements, setRequirements] = useState("");
   const [postsPerDay, setPostsPerDay] = useState(3);
   const [days, setDays] = useState(7);
   const [startDate, setStartDate] = useState(todayISO());
@@ -50,14 +50,8 @@ export default function PlanPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accountId: currentId,
-          themes: themes
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean),
-          avoid: avoid
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean),
+          brief: brief.trim(),
+          requirements: requirements.trim() || undefined,
           postsPerDay,
           daysInWeek: days,
           startDateISO: startDate,
@@ -77,7 +71,7 @@ export default function PlanPage() {
     setLoading(false);
   }
 
-  const ready = themes.trim().length > 0 && !loading && currentId !== null;
+  const ready = brief.trim().length > 0 && !loading && currentId !== null;
 
   if (currentId === null) return <NoAccount />;
 
@@ -96,34 +90,35 @@ export default function PlanPage() {
     <div className="p-10 max-w-6xl">
       <h1 className="text-3xl font-semibold mb-1">Weekly Plan</h1>
       <p className="text-muted mb-6">
-        Give it your themes for the week. It generates a calendar of original
-        posts in your voice, scheduled by day and suggested hour. Saved to the
-        queue.
+        Write a brief for the week — what you want to post about, what&apos;s
+        happening, the story you want to tell. It generates a calendar of posts
+        and threads in your voice, scheduled by day and suggested hour. Saved
+        to the queue.
       </p>
 
       <div className="bg-surface border border-border rounded-lg p-5 space-y-4 mb-6">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs uppercase tracking-wider text-muted mb-1.5">
-              Themes (one per line)
+              Content brief
             </label>
             <textarea
-              value={themes}
-              onChange={(e) => setThemes(e.target.value)}
-              rows={5}
-              placeholder={`restaking yield compression\nL2 economic models\nyour launch on Thursday`}
+              value={brief}
+              onChange={(e) => setBrief(e.target.value)}
+              rows={6}
+              placeholder={`Free-form. What are you focused on this week? Examples:\n\nRestaking yields are compressing — I want to ride that narrative. My protocol launches Thursday and I want a build-up: tease Mon, hint at the design Tue, behind-the-scenes Wed, launch Thu, post-mortem Fri. Throw in one contrarian take about L2 commoditization somewhere.`}
               className="w-full bg-background border border-border rounded-md p-3 text-sm resize-y focus:outline-none focus:border-accent"
             />
           </div>
           <div>
             <label className="block text-xs uppercase tracking-wider text-muted mb-1.5">
-              Avoid (one per line, optional)
+              Comments / requirements for the content (optional)
             </label>
             <textarea
-              value={avoid}
-              onChange={(e) => setAvoid(e.target.value)}
-              rows={5}
-              placeholder={`meme coins\ngm posts\nanything about competitor X`}
+              value={requirements}
+              onChange={(e) => setRequirements(e.target.value)}
+              rows={6}
+              placeholder={`Anything to enforce or avoid. Examples:\n\nInclude at least one thread (3-5 tweets). No meme coins. No "gm" posts. Don't mention competitor X by name. Keep posts under 200 chars where possible.`}
               className="w-full bg-background border border-border rounded-md p-3 text-sm resize-y focus:outline-none focus:border-accent"
             />
           </div>
