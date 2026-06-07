@@ -1,9 +1,40 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
-const DB_PATH = resolve(process.cwd(), "data", "twitter-machine.db");
+// Default to ~/.twitter-factory/ which lives OUTSIDE the project tree.
+// Keeping the SQLite DB outside the repo is essential under Turbopack 16 —
+// its file watcher reacts to SQLite's WAL/SHM churn and pegs the dev server
+// to 1000%+ CPU otherwise. Override with TWITTER_FACTORY_DB_PATH if you
+// want the DB somewhere else (e.g. shared volume in production).
+const DEFAULT_DB_DIR = join(homedir(), ".twitter-factory");
+const DB_PATH =
+  process.env.TWITTER_FACTORY_DB_PATH ??
+  join(DEFAULT_DB_DIR, "twitter-machine.db");
+
+// One-shot migration for installs that still have data at the old in-repo
+// location ./data/twitter-machine.db. If the new DB doesn't exist yet but
+// the old one does, move it (along with WAL/SHM siblings) so existing
+// training survives the upgrade.
+const LEGACY_DB_PATH = resolve(process.cwd(), "data", "twitter-machine.db");
+function migrateLegacyLocation() {
+  if (existsSync(DB_PATH)) return;
+  if (!existsSync(LEGACY_DB_PATH)) return;
+  mkdirSync(dirname(DB_PATH), { recursive: true });
+  for (const suffix of ["", "-shm", "-wal"]) {
+    const from = LEGACY_DB_PATH + suffix;
+    const to = DB_PATH + suffix;
+    if (existsSync(from)) {
+      try {
+        renameSync(from, to);
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+}
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -182,6 +213,7 @@ function migrateToMultiAccount(sqlite: Database.Database) {
 
 export function getDb() {
   if (_db) return _db;
+  migrateLegacyLocation();
   const dir = dirname(DB_PATH);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const sqlite = new Database(DB_PATH);
