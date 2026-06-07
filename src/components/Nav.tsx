@@ -4,16 +4,34 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "@/lib/account-context";
 
-const LINKS = [
-  { href: "/", label: "Dashboard" },
-  { href: "/generate", label: "Generate" },
-  { href: "/discover", label: "Discover Trends" },
-  { href: "/plan", label: "Weekly Plan" },
-  { href: "/calendar", label: "Calendar" },
-  { href: "/queue", label: "Approval Queue" },
-  { href: "/performance", label: "Performance" },
-  { href: "/targets", label: "Target Accounts" },
-  { href: "/voice", label: "Voice Training" },
+type Link = { href: string; label: string; kbd?: string };
+type Group = { divider?: string; items: Link[] };
+
+const LINKS: Group[] = [
+  {
+    items: [
+      { href: "/create", label: "Create", kbd: "⌘K" },
+      { href: "/queue", label: "Queue" },
+      { href: "/calendar", label: "Calendar" },
+      { href: "/performance", label: "Performance" },
+    ],
+  },
+  {
+    divider: "Power tools",
+    items: [
+      { href: "/discover", label: "Discover Trends" },
+      { href: "/generate", label: "Generate (raw)" },
+      { href: "/plan", label: "Weekly Plan (raw)" },
+    ],
+  },
+  {
+    divider: "Setup",
+    items: [
+      { href: "/accounts", label: "Accounts" },
+      { href: "/targets", label: "Target Accounts" },
+      { href: "/voice", label: "Voice Training" },
+    ],
+  },
 ];
 
 export function Nav() {
@@ -67,26 +85,41 @@ export function Nav() {
         )}
       </div>
 
-      <ul className="flex flex-col gap-1">
-        {LINKS.map((l) => {
-          const active =
-            l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
-          return (
-            <li key={l.href}>
-              <Link
-                href={l.href}
-                className={`block px-3 py-2 rounded-md text-sm transition-colors ${
-                  active
-                    ? "bg-surface-2 text-foreground"
-                    : "text-muted hover:bg-surface-2 hover:text-foreground"
-                }`}
-              >
-                {l.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="flex flex-col gap-4">
+        {LINKS.map((group, gi) => (
+          <div key={gi}>
+            {group.divider && (
+              <div className="px-3 mb-1.5 text-[10px] font-mono uppercase tracking-wider text-muted">
+                {group.divider}
+              </div>
+            )}
+            <ul className="flex flex-col gap-1">
+              {group.items.map((l) => {
+                const active = pathname.startsWith(l.href);
+                return (
+                  <li key={l.href}>
+                    <Link
+                      href={l.href}
+                      className={`flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors ${
+                        active
+                          ? "bg-surface-2 text-foreground"
+                          : "text-muted hover:bg-surface-2 hover:text-foreground"
+                      }`}
+                    >
+                      <span>{l.label}</span>
+                      {l.kbd && (
+                        <kbd className="text-[10px] font-mono text-muted px-1 py-px border border-border rounded bg-background">
+                          {l.kbd}
+                        </kbd>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
 
       <div className="mt-auto pt-6 px-3 text-xs text-muted leading-relaxed">
         <span className="block font-mono uppercase tracking-wider mb-1">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { CreatePalette } from "@/components/CreatePalette";
 import { Nav } from "@/components/Nav";
 import { AccountProvider } from "@/lib/account-context";
 import "./globals.css";
@@ -35,6 +36,7 @@ export default function RootLayout({
             <Nav />
             <main className="flex-1 min-w-0">{children}</main>
           </div>
+          <CreatePalette />
         </AccountProvider>
       </body>
     </html>
