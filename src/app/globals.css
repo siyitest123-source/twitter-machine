@@ -1,45 +1,49 @@
 @import "tailwindcss";
+@import "./design.css";
 
-:root {
-  --background: #0a0a0b;
-  --foreground: #ededed;
-  --surface: #131316;
-  --surface-2: #1c1c21;
-  --border: #26262c;
-  --muted: #8a8a93;
-  --accent: #5b8df6;
-  --accent-fg: #ffffff;
-  --danger: #e15252;
-  --success: #4ea766;
-}
-
+/* ============================================================
+   Map design-system tokens to Tailwind v4 color utilities so
+   utilities like `text-ink-2`, `bg-surface`, `border-border-2`
+   resolve to the correct theme-aware values.
+   ============================================================ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Surfaces */
+  --color-bg: var(--bg);
+  --color-bg-tint: var(--bg-tint);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  /* Borders */
   --color-border: var(--border);
+  --color-border-2: var(--border-2);
+  --color-border-strong: var(--border-strong);
+
+  /* Text */
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  /* Accent */
   --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-accent-ink: var(--accent-ink);
   --color-accent-fg: var(--accent-fg);
-  --color-danger: var(--danger);
+
+  /* Semantic */
   --color-success: var(--success);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
 
-html,
-body {
-  background: var(--background);
-  color: var(--foreground);
-}
+  /* Back-compat with existing `bg-background` / `text-foreground` usages */
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
 
-body {
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-::selection {
-  background: var(--accent);
-  color: var(--accent-fg);
+  /* Fonts */
+  --font-sans: var(--font);
+  --font-mono: var(--mono);
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { CreatePalette } from "@/components/CreatePalette";
 import { Nav } from "@/components/Nav";
+import { ThemeBoot } from "@/components/ThemeBoot";
 import { AccountProvider } from "@/lib/account-context";
 import "./globals.css";
 
@@ -17,7 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Twitter Factory",
-  description: "Multi-account Twitter content + engagement factory — manual mode",
+  description:
+    "Multi-account Twitter content + engagement factory — manual mode",
 };
 
 export default function RootLayout({
@@ -26,15 +28,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full">
+    // No data-theme here — ThemeBoot stamps it before paint to avoid flicker.
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <head>
+        <ThemeBoot />
+      </head>
+      <body>
         <AccountProvider>
-          <div className="flex min-h-screen">
+          <div className="app" data-nav="sidebar">
             <Nav />
-            <main className="flex-1 min-w-0">{children}</main>
+            <main className="canvas">
+              <div className="scroll">{children}</div>
+            </main>
           </div>
           <CreatePalette />
         </AccountProvider>

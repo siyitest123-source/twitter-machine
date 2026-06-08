@@ -1,9 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { NoAccount } from "@/components/NoAccount";
 import { useAccount } from "@/lib/account-context";
+import {
+  IconArrow,
+  IconArrowUpRight,
+  IconCalendar,
+  IconChart,
+  IconCreate,
+  IconQueue,
+  IconTarget,
+  IconVoice,
+} from "@/components/Icons";
 
 type Counts = { status: string; count: number }[];
 
@@ -18,9 +28,7 @@ export default function Dashboard() {
     if (currentId === null) return;
     setLoading(true);
     Promise.all([
-      fetch(`/api/drafts?status=all&limit=1&accountId=${currentId}`).then((r) =>
-        r.json(),
-      ),
+      fetch(`/api/drafts?status=all&limit=1&accountId=${currentId}`).then((r) => r.json()),
       fetch(`/api/voice?accountId=${currentId}`).then((r) => r.json()),
       fetch(`/api/targets?accountId=${currentId}`).then((r) => r.json()),
     ])
@@ -32,117 +40,263 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, [currentId]);
 
+  if (currentId === null) return <NoAccount />;
+
   const byStatus = (s: string) =>
     counts.find((c) => c.status === s)?.count ?? 0;
 
-  if (currentId === null) return <NoAccount />;
-
   return (
-    <div className="p-10 max-w-5xl">
-      <h1 className="text-3xl font-semibold mb-1">Dashboard</h1>
-      <p className="text-muted mb-8">
-        Working on{" "}
-        <span className="text-foreground font-medium">@{current?.handle}</span>.
-        Paste tweets in. Get drafts out. Approve and copy to post.
-      </p>
+    <div className="page page-mid rise">
+      {/* Page head */}
+      <div className="page-head">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 20,
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <h1 className="page-title">
+              Good morning, @{current?.handle}
+            </h1>
+            <p className="page-sub">
+              Paste tweets in, get drafts in your voice, approve and ship.
+              Here&apos;s where things stand.
+            </p>
+          </div>
+          <Link href="/create" className="btn btn-primary">
+            <IconCreate size={17} />
+            Create
+          </Link>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
-        <Stat label="Pending" value={byStatus("pending")} loading={loading} />
-        <Stat label="Approved" value={byStatus("approved")} loading={loading} />
+      {/* Stat row */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: "var(--gap-card)",
+          marginBottom: 14,
+        }}
+      >
+        <Stat
+          label="In queue"
+          value={byStatus("pending")}
+          Icon={IconQueue}
+          hint={loading ? "…" : `${byStatus("pending")} awaiting review`}
+        />
+        <Stat
+          label="Approved"
+          value={byStatus("approved")}
+          Icon={IconCalendar}
+          hint="ready to schedule"
+          accent
+        />
         <Stat
           label="Voice samples"
           value={voiceCount}
-          loading={loading}
-          subdued={voiceCount < 30}
-          subduedHint={voiceCount < 30 ? "add 30+ for best results" : undefined}
+          Icon={IconVoice}
+          hint={
+            voiceCount < 30
+              ? `add ${30 - voiceCount} for sharper output`
+              : "well trained"
+          }
+          hintWarn={voiceCount < 30}
         />
         <Stat
-          label="Target accounts"
+          label="Targets"
           value={targetCount}
-          loading={loading}
+          Icon={IconTarget}
+          hint="accounts watched"
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <ActionCard
-          href="/generate"
-          title="Generate drafts"
-          body="Paste a tweet you want to engage with. Get 3 candidates in your voice."
-        />
-        <ActionCard
-          href="/queue"
-          title="Approval queue"
-          body="Review pending drafts. Edit, approve, reject. Copy approved ones."
-        />
-        <ActionCard
-          href="/voice"
-          title="Train your voice"
-          body="Paste your past tweets. The more samples, the better the output sounds like you."
-        />
-      </div>
-
-      <div className="mt-12 p-5 bg-surface border border-border rounded-lg">
-        <div className="text-xs font-mono uppercase tracking-wider text-muted mb-2">
-          Workflow
+      {/* Two-up: quick actions + workflow */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.4fr 1fr",
+          gap: "var(--gap-card)",
+          alignItems: "start",
+          marginTop: 26,
+        }}
+      >
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>
+            Jump back in
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "var(--gap-card)",
+            }}
+          >
+            <QuickAction
+              href="/create"
+              Icon={IconCreate}
+              title="Generate drafts"
+              body="Paste a tweet or a brief. Get candidates written in your voice."
+            />
+            <QuickAction
+              href="/queue"
+              Icon={IconQueue}
+              title="Review queue"
+              body={`${byStatus("pending")} pending drafts ready to approve, edit, or reject.`}
+            />
+            <QuickAction
+              href="/calendar"
+              Icon={IconCalendar}
+              title="Plan the week"
+              body="Drag approved drafts across the calendar to schedule them."
+            />
+            <QuickAction
+              href="/voice"
+              Icon={IconVoice}
+              title="Train voice"
+              body="Paste past tweets so new drafts sound unmistakably like you."
+            />
+          </div>
         </div>
-        <ol className="text-sm space-y-1.5 list-decimal list-inside">
-          <li>Seed voice samples on the Voice page (30+ tweets recommended).</li>
-          <li>Add accounts to engage with on the Targets page.</li>
-          <li>
-            See a tweet you want to reply to? Paste it on the Generate page.
-          </li>
-          <li>Review the candidates in the Queue. Edit + approve.</li>
-          <li>Copy approved tweets and post manually on X.</li>
-        </ol>
+
+        {/* Workflow card */}
+        <div className="card" style={{ padding: 22 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
+            }}
+          >
+            <div className="eyebrow">Workflow</div>
+            <Link href="/voice" className="btn btn-ghost btn-sm">
+              Voice
+              <IconArrow size={15} />
+            </Link>
+          </div>
+          <ol
+            style={{
+              margin: 0,
+              padding: 0,
+              listStyle: "none",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            {[
+              "Seed voice samples (30+ tweets).",
+              "Add target accounts you want to engage with.",
+              "See a tweet to reply to? Paste it on Create.",
+              "Review candidates in Queue. Edit + approve.",
+              "Drag approved drafts onto Calendar, then post manually.",
+            ].map((step, i) => (
+              <li
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  fontSize: 13.5,
+                  lineHeight: 1.55,
+                  color: "var(--ink-2)",
+                }}
+              >
+                <span
+                  style={{
+                    flex: "none",
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--muted)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </div>
   );
 }
+
+/* ---------- primitives ---------- */
 
 function Stat({
   label,
   value,
-  loading,
-  subdued,
-  subduedHint,
+  Icon,
+  hint,
+  hintWarn,
+  accent,
 }: {
   label: string;
   value: number;
-  loading: boolean;
-  subdued?: boolean;
-  subduedHint?: string;
+  Icon: (p: { size?: number; className?: string }) => ReactElement;
+  hint?: string;
+  hintWarn?: boolean;
+  accent?: boolean;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-lg p-4">
-      <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
-      <div
-        className={`text-3xl font-semibold mt-1 ${subdued ? "text-muted" : ""}`}
-      >
-        {loading ? "·" : value}
+    <div className="card stat rise">
+      <div className="stat-top">
+        <span className="stat-label">{label}</span>
+        <Icon size={17} className="stat-ic" />
       </div>
-      {subduedHint && (
-        <div className="text-xs text-muted mt-1">{subduedHint}</div>
-      )}
+      <div>
+        <div
+          className="stat-val tnum"
+          style={accent ? { color: "var(--accent-ink)" } : undefined}
+        >
+          {value}
+        </div>
+        {hint && (
+          <div
+            className={`stat-hint${hintWarn ? " warn" : ""}`}
+            style={{ marginTop: 6 }}
+          >
+            {hint}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function ActionCard({
+function QuickAction({
   href,
+  Icon,
   title,
   body,
 }: {
   href: string;
+  Icon: (p: { size?: number }) => ReactElement;
   title: string;
   body: string;
 }) {
   return (
-    <Link
-      href={href}
-      className="block bg-surface border border-border rounded-lg p-5 hover:border-accent transition-colors"
-    >
-      <div className="font-medium mb-1">{title}</div>
-      <div className="text-sm text-muted leading-relaxed">{body}</div>
+    <Link href={href} className="card qa">
+      <IconArrowUpRight size={16} className="qa-arrow" />
+      <div className="qa-ic">
+        <Icon size={20} />
+      </div>
+      <div className="qa-title">{title}</div>
+      <div className="qa-body">{body}</div>
     </Link>
   );
 }
