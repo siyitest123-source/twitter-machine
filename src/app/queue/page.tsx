@@ -35,6 +35,10 @@ export default function QueuePage() {
     load(status);
   }, [load, status]);
 
+  function onImage(updated: Draft) {
+    setDrafts((ds) => ds.map((x) => (x.id === updated.id ? updated : x)));
+  }
+
   async function patch(id: number, body: Partial<Draft>) {
     const r = await fetch(`/api/drafts/${id}`, {
       method: "PATCH",
@@ -101,6 +105,7 @@ export default function QueuePage() {
               draft={d}
               onPatch={(body) => patch(d.id, body)}
               onDelete={() => remove(d.id)}
+              onImage={onImage}
             />
           ))}
         </div>
@@ -127,14 +132,19 @@ function DraftCard({
   draft,
   onPatch,
   onDelete,
+  onImage,
 }: {
   draft: Draft;
   onPatch: (body: Partial<Draft>) => void;
   onDelete: () => void;
+  onImage: (updated: Draft) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(draft.text);
   const [copied, setCopied] = useState(false);
+  const [imgState, setImgState] = useState<
+    { kind: "idle" } | { kind: "loading" } | { kind: "error"; msg: string }
+  >({ kind: "idle" });
   const len = text.length;
   const threadParts: string[] = draft.threadParts
     ? (() => {
@@ -145,6 +155,39 @@ function DraftCard({
         }
       })()
     : [];
+
+  async function genImage() {
+    setImgState({ kind: "loading" });
+    try {
+      const r = await fetch(`/api/drafts/${draft.id}/image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setImgState({ kind: "error", msg: d.error ?? "failed" });
+      } else {
+        onImage(d.draft);
+        setImgState({ kind: "idle" });
+      }
+    } catch (e) {
+      setImgState({
+        kind: "error",
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  async function removeImage() {
+    const r = await fetch(`/api/drafts/${draft.id}/image`, {
+      method: "DELETE",
+    });
+    if (r.ok) {
+      const d = await r.json();
+      onImage(d.draft);
+    }
+  }
 
   return (
     <div className="bg-surface border border-border rounded-md p-4">
@@ -200,6 +243,68 @@ function DraftCard({
           {text}
         </div>
       )}
+
+      <div className="mb-3">
+        {draft.imageUrl ? (
+          <div className="flex gap-3 items-start">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`${draft.imageUrl}?t=${draft.updatedAt}`}
+              alt={draft.imagePrompt ?? "generated image"}
+              className="h-32 rounded-md border border-border object-cover"
+            />
+            <div className="flex-1 min-w-0">
+              {draft.imagePrompt && (
+                <div
+                  className="text-[11px] italic text-muted line-clamp-3 mb-2"
+                  title={draft.imagePrompt}
+                >
+                  &ldquo;{draft.imagePrompt}&rdquo;
+                </div>
+              )}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={genImage}
+                  disabled={imgState.kind === "loading"}
+                  className="text-xs px-2.5 py-1 border border-border rounded hover:border-foreground disabled:opacity-40"
+                >
+                  {imgState.kind === "loading" ? "Generating…" : "Regenerate"}
+                </button>
+                <a
+                  href={`${draft.imageUrl}?t=${draft.updatedAt}`}
+                  download={`tweet-${draft.id}.jpg`}
+                  className="text-xs px-2.5 py-1 border border-border rounded hover:border-foreground"
+                >
+                  Download
+                </a>
+                <button
+                  onClick={removeImage}
+                  className="text-xs px-2.5 py-1 text-muted hover:text-danger"
+                >
+                  Remove image
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              onClick={genImage}
+              disabled={imgState.kind === "loading"}
+              className="px-2.5 py-1 border border-dashed border-border rounded hover:border-accent hover:text-accent disabled:opacity-40"
+            >
+              {imgState.kind === "loading"
+                ? "Generating image (5–8s)…"
+                : "+ Generate image"}
+            </button>
+            {imgState.kind === "error" && (
+              <span className="text-danger truncate" title={imgState.msg}>
+                {imgState.msg}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       {threadParts.length > 0 && (
         <details className="mb-3">

@@ -61,6 +61,8 @@ export const drafts = sqliteTable("drafts", {
     .notNull()
     .default("pending"),
   scheduledFor: integer("scheduled_for"),
+  imageUrl: text("image_url"), // /api/image/<accountId>/<draftId>.jpg when generated
+  imagePrompt: text("image_prompt"), // the Flux prompt we sent — for debugging + regen
   postedAt: integer("posted_at"),
   impressions: integer("impressions").notNull().default(0),
   likes: integer("likes").notNull().default(0),

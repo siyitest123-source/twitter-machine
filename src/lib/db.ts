@@ -87,6 +87,8 @@ function ensureSchema(sqlite: Database.Database) {
       angle TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       scheduled_for INTEGER,
+      image_url TEXT,
+      image_prompt TEXT,
       posted_at INTEGER,
       impressions INTEGER NOT NULL DEFAULT 0,
       likes INTEGER NOT NULL DEFAULT 0,
@@ -120,6 +122,8 @@ function ensureSchema(sqlite: Database.Database) {
   addDraftColumn("retweets", "retweets INTEGER NOT NULL DEFAULT 0");
   addDraftColumn("replies", "replies INTEGER NOT NULL DEFAULT 0");
   addDraftColumn("metrics_updated_at", "metrics_updated_at INTEGER");
+  addDraftColumn("image_url", "image_url TEXT");
+  addDraftColumn("image_prompt", "image_prompt TEXT");
 
   migrateToMultiAccount(sqlite);
 }
