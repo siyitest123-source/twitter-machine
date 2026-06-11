@@ -26,20 +26,17 @@ type Item = {
   href: string;
   label: string;
   Icon: (p: { size?: number }) => ReactElement;
-  kbd?: string;
 };
-type Group = { divider?: string; items: Item[] };
 
-const GROUPS: Group[] = [
-  {
-    items: [
-      { href: "/", label: "Home", Icon: IconHome },
-      { href: "/create", label: "Create", Icon: IconCreate, kbd: "⌘K" },
-      { href: "/queue", label: "Queue", Icon: IconQueue },
-      { href: "/calendar", label: "Calendar", Icon: IconCalendar },
-      { href: "/performance", label: "Performance", Icon: IconChart },
-    ],
-  },
+// Top-bar primary nav (4 visible). Everything else folds into the More menu.
+const PRIMARY: Item[] = [
+  { href: "/", label: "Home", Icon: IconHome },
+  { href: "/queue", label: "Queue", Icon: IconQueue },
+  { href: "/calendar", label: "Calendar", Icon: IconCalendar },
+  { href: "/performance", label: "Performance", Icon: IconChart },
+];
+
+const MORE: { divider: string; items: Item[] }[] = [
   {
     divider: "Power tools",
     items: [
@@ -77,9 +74,9 @@ function AccountSwitcher() {
 
   if (loading) {
     return (
-      <div className="acct" style={{ color: "var(--muted)", fontSize: 13 }}>
+      <span className="topbar-acct" style={{ color: "var(--muted)" }}>
         loading…
-      </div>
+      </span>
     );
   }
 
@@ -87,36 +84,31 @@ function AccountSwitcher() {
     return (
       <Link
         href="/accounts"
-        className="acct"
-        style={{ justifyContent: "center", color: "var(--accent-ink)" }}
+        className="topbar-acct"
+        style={{ color: "var(--accent-ink)" }}
       >
-        <IconPlus size={15} />
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Create first account</span>
+        <IconPlus size={14} />
+        <span style={{ fontSize: 13, fontWeight: 500 }}>Create account</span>
       </Link>
     );
   }
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <div ref={ref} className="topbar-more">
       <button
         type="button"
-        className="acct"
+        className="topbar-acct"
         onClick={() => setOpen((o) => !o)}
       >
         <div className={`acct-av ${avatarClass(current?.id ?? 0)}`}>
           {(current?.handle ?? "?")[0]?.toUpperCase()}
         </div>
-        <div className="acct-meta">
-          <div className="acct-handle">@{current?.handle}</div>
-          <div className="acct-name">{current?.displayName ?? "—"}</div>
-        </div>
-        <IconChevDown size={15} style={{ color: "var(--muted)", flex: "none" }} />
+        <span style={{ fontWeight: 600 }}>@{current?.handle}</span>
+        <IconChevDown size={14} style={{ color: "var(--muted)" }} />
       </button>
       {open && (
-        <div className="acct-pop" style={{ top: "calc(100% + 6px)", left: 0, right: 0 }}>
-          <div className="side-label" style={{ padding: "6px 10px" }}>
-            Switch account
-          </div>
+        <div className="topbar-pop" style={{ right: 0 }}>
+          <div className="side-label">Switch account</div>
           {accounts.map((a) => (
             <button
               key={a.id}
@@ -127,26 +119,90 @@ function AccountSwitcher() {
                 setCurrentId(a.id);
                 setOpen(false);
               }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "7px 10px",
+                borderRadius: 6,
+                fontSize: 13,
+                color: "var(--ink-2)",
+                background: a.id === currentId ? "var(--surface-2)" : "transparent",
+                border: 0,
+                cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
+              }}
             >
-              <div className={`acct-av ${avatarClass(a.id)}`}>
+              <div className={`acct-av ${avatarClass(a.id)}`} style={{ width: 22, height: 22, fontSize: 11 }}>
                 {a.handle[0].toUpperCase()}
               </div>
-              <div className="acct-meta">
-                <div className="acct-handle">@{a.handle}</div>
-                <div className="acct-name">{a.displayName ?? "—"}</div>
-              </div>
+              <span style={{ flex: 1 }}>@{a.handle}</span>
               {a.id === currentId && (
-                <IconCheck size={15} style={{ color: "var(--accent)", flex: "none" }} />
+                <IconCheck size={14} style={{ color: "var(--accent)" }} />
               )}
             </button>
           ))}
           <div className="hr" style={{ margin: "6px 0" }} />
-          <Link href="/accounts" className="acct-opt" style={{ color: "var(--ink-2)" }}>
-            <span style={{ width: 30, display: "grid", placeItems: "center" }}>
-              <IconSettings size={15} />
-            </span>
-            <span style={{ fontSize: 13.5, fontWeight: 500 }}>Manage accounts</span>
+          <Link href="/accounts" onClick={() => setOpen(false)}>
+            <IconSettings size={14} />
+            <span>Manage accounts</span>
           </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MoreMenu({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  const anyActive = MORE.some((g) =>
+    g.items.some((i) => pathname.startsWith(i.href)),
+  );
+  return (
+    <div ref={ref} className="topbar-more">
+      <button
+        type="button"
+        className="topbar-more-btn"
+        onClick={() => setOpen((o) => !o)}
+        style={
+          anyActive
+            ? { background: "var(--surface-2)", color: "var(--ink)" }
+            : undefined
+        }
+      >
+        More
+        <IconChevDown size={13} />
+      </button>
+      {open && (
+        <div className="topbar-pop" style={{ left: 0 }}>
+          {MORE.map((g) => (
+            <div key={g.divider}>
+              <div className="side-label">{g.divider}</div>
+              {g.items.map(({ href, label, Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    data-on={active}
+                    onClick={() => setOpen(false)}
+                  >
+                    <Icon size={15} />
+                    <span>{label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -159,58 +215,35 @@ export function Nav() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <aside className="sidebar">
-      {/* Brand */}
-      <div className="brand" style={{ padding: "0 8px" }}>
-        <div className="brand-mark">F</div>
-        <div className="brand-name">
-          Factory<small>Twitter studio</small>
-        </div>
-      </div>
+    <header className="topbar">
+      <Link href="/" className="topbar-brand">
+        <span className="topbar-mark">F</span>
+        <span>Factory</span>
+      </Link>
 
-      {/* Account switcher */}
-      <AccountSwitcher />
+      <nav className="topbar-nav">
+        {PRIMARY.map(({ href, label, Icon }) => (
+          <Link key={href} href={href} data-on={isActive(href)}>
+            <Icon size={16} />
+            <span>{label}</span>
+          </Link>
+        ))}
+        <MoreMenu pathname={pathname} />
+      </nav>
 
-      {/* Navigation groups */}
-      {GROUPS.map((group, i) => (
-        <div key={i} className="side-section">
-          {group.divider && <div className="side-label">{group.divider}</div>}
-          {group.items.map(({ href, label, Icon, kbd }) => (
-            <Link
-              key={href}
-              href={href}
-              className="nav-link"
-              data-on={isActive(href)}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-              {kbd && <span className="kbd">{kbd}</span>}
-            </Link>
-          ))}
-        </div>
-      ))}
-
-      {/* Footer */}
-      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div className="hr" />
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 4px",
-          }}
+      <div className="topbar-actions">
+        <Link
+          href="/create"
+          className="topbar-cta"
+          data-on={isActive("/create")}
         >
-          <div
-            className="eyebrow"
-            style={{ display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}
-          >
-            <span className="dot" style={{ background: "var(--success)" }} />
-            Manual mode
-          </div>
-          <ThemeToggle />
-        </div>
+          <IconCreate size={15} />
+          <span>Create</span>
+          <span className="kbd">⌘K</span>
+        </Link>
+        <AccountSwitcher />
+        <ThemeToggle />
       </div>
-    </aside>
+    </header>
   );
 }

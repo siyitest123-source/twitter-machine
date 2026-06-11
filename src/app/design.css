@@ -608,3 +608,215 @@ textarea.field { resize: vertical; line-height: 1.55; }
 .meter { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .meter-fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width 0.5s var(--ease); }
 
+
+/* ============================================================
+   TOP NAV LAYOUT — used by app[data-nav="top"]
+   ============================================================ */
+.app[data-nav="top"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.app[data-nav="top"] > .canvas {
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 24px;
+  height: 60px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+}
+.topbar-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+}
+.topbar-brand small {
+  display: none;
+}
+
+.topbar-nav {
+  display: flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+.topbar-nav a {
+  padding: 7px 12px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  transition: background-color 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.topbar-nav a:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+}
+.topbar-nav a[data-on="true"] {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.12s, transform 0.04s;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+.topbar-cta:hover { background: var(--accent-press); }
+.topbar-cta:active { transform: translateY(1px); }
+.topbar-cta .kbd {
+  background: rgba(255, 255, 255, 0.18);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.topbar-acct {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 5px 10px 5px 6px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--ink);
+  position: relative;
+}
+.topbar-acct:hover { border-color: var(--border-strong); }
+.topbar-acct .acct-av {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 11px;
+  color: white;
+  flex: none;
+}
+
+.topbar-more {
+  position: relative;
+}
+.topbar-more-btn {
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.topbar-more-btn:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+}
+.topbar-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  min-width: 220px;
+  z-index: 40;
+}
+.topbar-pop .side-label {
+  padding: 8px 10px 4px;
+}
+.topbar-pop a {
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: background-color 0.12s, color 0.12s;
+}
+.topbar-pop a:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+}
+.topbar-pop a[data-on="true"] {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+.icon-btn:hover {
+  background: var(--bg-tint);
+  color: var(--ink);
+  border-color: var(--border-strong);
+}

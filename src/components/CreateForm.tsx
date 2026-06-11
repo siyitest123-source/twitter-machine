@@ -33,10 +33,20 @@ function todayISO(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+type Candidate = {
+  text: string;
+  thread_continuation: string[] | null;
+  angle: string;
+  // Local-only state for the preview flow:
+  savedId?: number | null; // set after Save-to-queue succeeds
+  saving?: boolean;
+};
+
 type Result =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "saved"; count: number; href: string; label: string }
+  | { kind: "preview"; candidates: Candidate[] } // single / reply / qrt / thread — user picks
+  | { kind: "saved"; count: number; href: string; label: string } // plan only (batch)
   | { kind: "redirect"; href: string; label: string }
   | { kind: "skipped"; reason: string }
   | { kind: "error"; msg: string };
@@ -133,7 +143,9 @@ export function CreateForm({
         return;
       }
 
-      // single OR reply → /api/generate
+      // single OR reply → /api/generate. Do NOT auto-save — show candidates
+      // inline so the user can preview, edit, regenerate, then explicitly
+      // save the ones they want. Brief textarea stays put.
       const apiType = resolveType();
       const r = await fetch("/api/generate", {
         method: "POST",
@@ -147,7 +159,7 @@ export function CreateForm({
           sourceText: sourceText.trim() || undefined,
           sourceHandle: sourceHandle.trim() || undefined,
           numCandidates,
-          saveAsDrafts: true,
+          saveAsDrafts: false,
         }),
       });
       const d = await r.json();
@@ -159,13 +171,15 @@ export function CreateForm({
         setResult({ kind: "skipped", reason: d.skippedReason });
         return;
       }
-      const count = d.saved?.length ?? 0;
-      setResult({
-        kind: "saved",
-        count,
-        href: "/queue",
-        label: `${count} candidates saved · open Queue`,
-      });
+      const candidates: Candidate[] = (d.candidates ?? []).map(
+        (c: { text: string; thread_continuation?: string[] | null; angle?: string }) => ({
+          text: c.text,
+          thread_continuation: c.thread_continuation ?? null,
+          angle: c.angle ?? "",
+          savedId: null,
+        }),
+      );
+      setResult({ kind: "preview", candidates });
     } catch (e) {
       setResult({
         kind: "error",
@@ -194,6 +208,57 @@ export function CreateForm({
     setSourceUrl("");
     setSourceText("");
     setResult({ kind: "idle" });
+  }
+
+  function updateCandidate(idx: number, patch: Partial<Candidate>) {
+    setResult((r) => {
+      if (r.kind !== "preview") return r;
+      const next = r.candidates.slice();
+      next[idx] = { ...next[idx], ...patch };
+      return { kind: "preview", candidates: next };
+    });
+  }
+
+  async function saveCandidate(idx: number) {
+    if (result.kind !== "preview" || !currentId) return;
+    const c = result.candidates[idx];
+    if (c.savedId || c.saving) return;
+    updateCandidate(idx, { saving: true });
+    try {
+      const apiType = resolveType();
+      const r = await fetch("/api/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: currentId,
+          type: apiType,
+          text: c.text,
+          threadParts:
+            apiType === "thread" && c.thread_continuation?.length
+              ? c.thread_continuation
+              : undefined,
+          angle: c.angle || undefined,
+          sourceUrl: sourceUrl.trim() || undefined,
+          sourceText: sourceText.trim() || undefined,
+          sourceHandle: sourceHandle.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        updateCandidate(idx, {
+          saving: false,
+          // Surface the error via an inline-only error label by repurposing angle.
+        });
+        // For now: show as a window alert + the saving spinner stops.
+        // (Quick visual fallback; can replace with proper error state per-card later.)
+        console.error("Save failed:", d.error);
+        return;
+      }
+      updateCandidate(idx, { saving: false, savedId: d.draft?.id ?? -1 });
+    } catch (e) {
+      updateCandidate(idx, { saving: false });
+      console.error(e);
+    }
   }
 
   // ============================================================
@@ -378,10 +443,32 @@ export function CreateForm({
           </Bubble>
         )}
 
-        {/* Result */}
-        {result.kind !== "idle" && contentType !== "trends" && (
-          <ResultCard result={result} onReset={reset} onClose={onClose} />
+        {/* Result: preview cards for single/reply, batch-result for plan */}
+        {result.kind === "loading" && (
+          <Bubble side="sys">
+            <div className="text-sm text-muted">Working in your voice…</div>
+          </Bubble>
         )}
+        {result.kind === "preview" && (
+          <PreviewSection
+            candidates={result.candidates}
+            isThread={resolveType() === "thread"}
+            onSave={saveCandidate}
+            onEdit={(i, text) => updateCandidate(i, { text })}
+            onEditThread={(i, parts) =>
+              updateCandidate(i, { thread_continuation: parts })
+            }
+            onRegenerate={submit}
+            onDismiss={() => setResult({ kind: "idle" })}
+            loading={false}
+          />
+        )}
+        {(result.kind === "saved" ||
+          result.kind === "error" ||
+          result.kind === "skipped") &&
+          contentType !== "trends" && (
+            <ResultCard result={result} onReset={reset} onClose={onClose} />
+          )}
       </div>
     );
   }
@@ -576,11 +663,32 @@ export function CreateForm({
         </div>
       </div>
 
-      {result.kind !== "idle" && contentType !== "trends" && (
-        <div className="px-5 py-3 border-t border-border">
-          <ResultCard result={result} onReset={reset} onClose={onClose} inline />
+      {result.kind === "preview" && (
+        <div className="px-5 py-4 border-t border-border">
+          <PreviewSection
+            candidates={result.candidates}
+            isThread={resolveType() === "thread"}
+            onSave={saveCandidate}
+            onEdit={(i, text) => updateCandidate(i, { text })}
+            onEditThread={(i, parts) =>
+              updateCandidate(i, { thread_continuation: parts })
+            }
+            onRegenerate={submit}
+            onDismiss={() => setResult({ kind: "idle" })}
+            loading={false}
+            compact
+          />
         </div>
       )}
+      {(result.kind === "loading" ||
+        result.kind === "saved" ||
+        result.kind === "error" ||
+        result.kind === "skipped") &&
+        contentType !== "trends" && (
+          <div className="px-5 py-3 border-t border-border">
+            <ResultCard result={result} onReset={reset} onClose={onClose} inline />
+          </div>
+        )}
     </div>
   );
 }
@@ -797,4 +905,217 @@ function ResultCard({
     );
   }
   return null;
+}
+
+// ============================================================
+// PreviewSection — shows generated candidates inline before save.
+// Each card: text (editable), thread continuation (if any), per-candidate
+// Save / Regenerate / Open queue. Brief stays mounted above so the user
+// can tweak + regenerate without losing it.
+// ============================================================
+function PreviewSection({
+  candidates,
+  isThread,
+  onSave,
+  onEdit,
+  onEditThread,
+  onRegenerate,
+  onDismiss,
+  loading,
+  compact,
+}: {
+  candidates: Candidate[];
+  isThread: boolean;
+  onSave: (idx: number) => void;
+  onEdit: (idx: number, text: string) => void;
+  onEditThread: (idx: number, parts: string[]) => void;
+  onRegenerate: () => void;
+  onDismiss: () => void;
+  loading: boolean;
+  compact?: boolean;
+}) {
+  const allSaved = candidates.length > 0 && candidates.every((c) => c.savedId);
+
+  return (
+    <div className={compact ? "" : "mt-1"}>
+      {!compact && (
+        <div className="mb-2 flex items-baseline justify-between">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-muted">
+            Preview · {candidates.length} candidate
+            {candidates.length === 1 ? "" : "s"}
+          </div>
+          <div className="text-xs text-muted">
+            Save the ones you like. Your brief stays put.
+          </div>
+        </div>
+      )}
+      <div className="space-y-2.5">
+        {candidates.map((c, i) => (
+          <PreviewCard
+            key={i}
+            n={i + 1}
+            candidate={c}
+            isThread={isThread}
+            onSave={() => onSave(i)}
+            onEdit={(t) => onEdit(i, t)}
+            onEditThread={(parts) => onEditThread(i, parts)}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <button
+          onClick={onRegenerate}
+          disabled={loading}
+          className="text-xs px-3 py-1.5 border border-border rounded-md hover:border-accent hover:text-accent disabled:opacity-40"
+        >
+          ↻ Regenerate with the same brief
+        </button>
+        <button
+          onClick={onDismiss}
+          className="text-xs px-3 py-1.5 text-muted hover:text-foreground"
+        >
+          Dismiss
+        </button>
+        {allSaved && (
+          <a
+            href="/queue"
+            className="ml-auto text-xs px-3 py-1.5 bg-accent text-accent-fg rounded-md font-medium"
+          >
+            All saved → open Queue
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PreviewCard({
+  n,
+  candidate,
+  isThread,
+  onSave,
+  onEdit,
+  onEditThread,
+}: {
+  n: number;
+  candidate: Candidate;
+  isThread: boolean;
+  onSave: () => void;
+  onEdit: (text: string) => void;
+  onEditThread: (parts: string[]) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const thread = candidate.thread_continuation ?? [];
+  const len = candidate.text.length;
+  const isSaved = !!candidate.savedId;
+
+  function updatePart(i: number, v: string) {
+    const next = thread.slice();
+    next[i] = v;
+    onEditThread(next);
+  }
+
+  return (
+    <div
+      className={`bg-surface border rounded-md p-3 transition-colors ${
+        isSaved ? "border-success/50" : "border-border"
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-2 text-muted">
+          {String(n).padStart(2, "0")}
+        </span>
+        {candidate.angle && (
+          <span className="text-xs text-muted italic">{candidate.angle}</span>
+        )}
+        {isThread && thread.length > 0 && (
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent/20 text-accent">
+            thread · {thread.length + 1}
+          </span>
+        )}
+        <span
+          className={`text-xs ml-auto ${len > 280 ? "text-danger" : "text-muted"}`}
+        >
+          {len}/280
+        </span>
+      </div>
+
+      {editing ? (
+        <textarea
+          value={candidate.text}
+          onChange={(e) => onEdit(e.target.value)}
+          rows={3}
+          className="w-full bg-background border border-border rounded-md p-2 text-sm resize-y focus:outline-none focus:border-accent"
+        />
+      ) : (
+        <div className="text-sm leading-relaxed whitespace-pre-wrap mb-1">
+          {candidate.text}
+        </div>
+      )}
+
+      {isThread && thread.length > 0 && (
+        <ol className="mt-2 space-y-1.5 text-sm leading-relaxed">
+          {thread.map((t, i) => (
+            <li key={i} className="flex gap-2 items-start">
+              <span className="text-[10px] font-mono text-muted pt-0.5 shrink-0">
+                {String(i + 2).padStart(2, "0")}
+              </span>
+              {editing ? (
+                <textarea
+                  value={t}
+                  onChange={(e) => updatePart(i, e.target.value)}
+                  rows={2}
+                  className="flex-1 bg-background border border-border rounded-md p-1.5 text-sm resize-y focus:outline-none focus:border-accent"
+                />
+              ) : (
+                <div className="flex-1 pl-2 border-l-2 border-border whitespace-pre-wrap">
+                  {t}
+                </div>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+        {!isSaved && (
+          <button
+            onClick={onSave}
+            disabled={candidate.saving}
+            className="text-xs px-2.5 py-1 bg-success/15 text-success border border-success/40 rounded-md hover:bg-success/25 disabled:opacity-40"
+          >
+            {candidate.saving ? "Saving…" : "✓ Save to queue"}
+          </button>
+        )}
+        {isSaved && (
+          <span className="text-xs px-2.5 py-1 bg-success/25 text-success rounded-md flex items-center gap-1">
+            ✓ Saved
+            <a
+              href="/queue"
+              className="underline ml-1 hover:no-underline"
+            >
+              view
+            </a>
+          </span>
+        )}
+        <button
+          onClick={() => setEditing((e) => !e)}
+          className="text-xs px-2.5 py-1 border border-border rounded-md hover:border-foreground"
+        >
+          {editing ? "Done editing" : "Edit"}
+        </button>
+        <button
+          onClick={async () => {
+            const all = isThread && thread.length
+              ? [candidate.text, ...thread].join("\n\n---\n\n")
+              : candidate.text;
+            await navigator.clipboard.writeText(all);
+          }}
+          className="text-xs px-2.5 py-1 border border-border rounded-md hover:border-foreground"
+        >
+          Copy
+        </button>
+      </div>
+    </div>
+  );
 }

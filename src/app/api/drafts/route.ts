@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, isNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { resolveAccountId } from "@/lib/accounts";
+import { getAccount, resolveAccountId } from "@/lib/accounts";
 import { getDb } from "@/lib/db";
 import { drafts } from "@/lib/schema";
 
@@ -63,4 +63,56 @@ export async function GET(request: Request) {
     .groupBy(drafts.status);
 
   return Response.json({ drafts: rows, counts });
+}
+
+// ============================================================
+// POST /api/drafts — create a single draft (used by /create's
+// "Save to queue" on a chosen candidate after preview).
+// ============================================================
+const CreateSchema = z.object({
+  accountId: z.number().int().positive(),
+  type: z.enum(["reply", "qrt", "original", "thread"]),
+  text: z.string().min(1).max(4000),
+  threadParts: z.array(z.string().min(1).max(4000)).max(20).optional(),
+  angle: z.string().max(120).optional(),
+  sourceUrl: z.string().url().optional().or(z.literal("").transform(() => undefined)),
+  sourceText: z.string().max(4000).optional(),
+  sourceHandle: z.string().max(64).optional(),
+});
+
+export async function POST(request: Request) {
+  const parsed = CreateSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return Response.json(
+      { error: "invalid body", details: parsed.error.flatten() },
+      { status: 400 },
+    );
+  }
+  const input = parsed.data;
+
+  const db = getDb();
+  const account = await getAccount(db, input.accountId);
+  if (!account) {
+    return Response.json({ error: "unknown accountId" }, { status: 400 });
+  }
+
+  const [row] = await db
+    .insert(drafts)
+    .values({
+      accountId: account.id,
+      type: input.type,
+      text: input.text,
+      threadParts:
+        input.type === "thread" && input.threadParts?.length
+          ? JSON.stringify(input.threadParts)
+          : null,
+      angle: input.angle ?? null,
+      sourceUrl: input.sourceUrl ?? null,
+      sourceText: input.sourceText ?? null,
+      sourceHandle: input.sourceHandle?.replace(/^@/, "") ?? null,
+      status: "pending" as const,
+    })
+    .returning();
+
+  return Response.json({ draft: row });
 }

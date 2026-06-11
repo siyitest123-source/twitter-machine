@@ -35,7 +35,7 @@ export default function RootLayout({
       </head>
       <body>
         <AccountProvider>
-          <div className="app" data-nav="sidebar">
+          <div className="app" data-nav="top">
             <Nav />
             <main className="canvas">
               <div className="scroll">{children}</div>
