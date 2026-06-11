@@ -189,6 +189,31 @@ function DraftCard({
     }
   }
 
+  const [tfState, setTfState] = useState<
+    { kind: "idle" } | { kind: "sending" } | { kind: "err"; msg: string }
+  >({ kind: "idle" });
+
+  async function sendToTypefully() {
+    setTfState({ kind: "sending" });
+    try {
+      const r = await fetch(`/api/drafts/${draft.id}/typefully`, {
+        method: "POST",
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setTfState({ kind: "err", msg: d.error ?? "failed" });
+      } else {
+        setTfState({ kind: "idle" });
+        onImage(d.draft); // reuse the parent's draft-replace callback
+      }
+    } catch (e) {
+      setTfState({
+        kind: "err",
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   return (
     <div className="bg-surface border border-border rounded-md p-4">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -379,6 +404,29 @@ function DraftCard({
         >
           Open in X →
         </a>
+        {draft.typefullyUrl ? (
+          <a
+            href={draft.typefullyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-2.5 py-1 bg-accent/15 text-accent border border-accent/40 rounded hover:bg-accent/25"
+          >
+            ✓ In Typefully ↗
+          </a>
+        ) : (
+          <button
+            onClick={sendToTypefully}
+            disabled={tfState.kind === "sending"}
+            title={tfState.kind === "err" ? tfState.msg : "Send to Typefully for team review"}
+            className="text-xs px-2.5 py-1 border border-accent/40 text-accent rounded hover:bg-accent/10 disabled:opacity-40"
+          >
+            {tfState.kind === "sending"
+              ? "Sending…"
+              : tfState.kind === "err"
+                ? "Retry → Typefully"
+                : "↗ Send to Typefully"}
+          </button>
+        )}
 
         <div className="ml-auto flex gap-2">
           {draft.status !== "approved" && (

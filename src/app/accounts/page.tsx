@@ -132,16 +132,48 @@ function AccountCard({
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(account.displayName ?? "");
   const [persona, setPersona] = useState(account.persona ?? "");
+  const [typefullyApiKey, setTypefullyApiKey] = useState(
+    account.typefullyApiKey ?? "",
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tfTest, setTfTest] = useState<
+    { kind: "idle" } | { kind: "testing" } | { kind: "ok" } | { kind: "err"; msg: string }
+  >({ kind: "idle" });
 
   async function save() {
     await fetch(`/api/accounts/${account.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ displayName, persona }),
+      body: JSON.stringify({
+        displayName,
+        persona,
+        typefullyApiKey: typefullyApiKey.trim() || null,
+      }),
     });
     setEditing(false);
     onChanged();
+  }
+
+  async function testTypefully() {
+    setTfTest({ kind: "testing" });
+    try {
+      const r = await fetch(
+        `/api/accounts/${account.id}/typefully/test`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: typefullyApiKey.trim() || undefined }),
+        },
+      );
+      const d = await r.json();
+      if (r.ok && d.ok) setTfTest({ kind: "ok" });
+      else setTfTest({ kind: "err", msg: d.error ?? "failed" });
+    } catch (e) {
+      setTfTest({
+        kind: "err",
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 
   async function remove() {
@@ -194,6 +226,46 @@ function AccountCard({
             placeholder="Persona / tone"
             className="w-full bg-background border border-border rounded-md p-3 text-sm resize-y focus:outline-none focus:border-accent"
           />
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-muted mb-1.5 mt-1">
+              Typefully API key (optional)
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={typefullyApiKey}
+                onChange={(e) => {
+                  setTypefullyApiKey(e.target.value);
+                  setTfTest({ kind: "idle" });
+                }}
+                type="password"
+                placeholder="Pro plan required · Typefully → Settings → API"
+                className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent"
+              />
+              <button
+                onClick={testTypefully}
+                disabled={
+                  !typefullyApiKey.trim() || tfTest.kind === "testing"
+                }
+                className="px-3 py-2 text-xs border border-border rounded-md hover:border-foreground disabled:opacity-40"
+              >
+                {tfTest.kind === "testing" ? "Testing…" : "Test"}
+              </button>
+            </div>
+            <div className="mt-1.5 text-xs min-h-[1.25rem]">
+              {tfTest.kind === "ok" && (
+                <span className="text-success">✓ Connection works.</span>
+              )}
+              {tfTest.kind === "err" && (
+                <span className="text-danger">{tfTest.msg}</span>
+              )}
+              {tfTest.kind === "idle" && (
+                <span className="text-muted">
+                  Used to send approved drafts to Typefully for team review
+                  before publishing to X.
+                </span>
+              )}
+            </div>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={save}

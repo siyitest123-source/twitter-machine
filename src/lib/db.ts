@@ -54,6 +54,7 @@ function ensureSchema(sqlite: Database.Database) {
       handle TEXT NOT NULL UNIQUE,
       display_name TEXT,
       persona TEXT,
+      typefully_api_key TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
@@ -95,6 +96,9 @@ function ensureSchema(sqlite: Database.Database) {
       retweets INTEGER NOT NULL DEFAULT 0,
       replies INTEGER NOT NULL DEFAULT 0,
       metrics_updated_at INTEGER,
+      typefully_draft_id TEXT,
+      typefully_url TEXT,
+      typefully_sent_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -124,6 +128,15 @@ function ensureSchema(sqlite: Database.Database) {
   addDraftColumn("metrics_updated_at", "metrics_updated_at INTEGER");
   addDraftColumn("image_url", "image_url TEXT");
   addDraftColumn("image_prompt", "image_prompt TEXT");
+  addDraftColumn("typefully_draft_id", "typefully_draft_id TEXT");
+  addDraftColumn("typefully_url", "typefully_url TEXT");
+  addDraftColumn("typefully_sent_at", "typefully_sent_at INTEGER");
+
+  // Idempotent migration for the accounts.typefully_api_key column.
+  const acctCols = columnNames(sqlite, "accounts");
+  if (!acctCols.has("typefully_api_key")) {
+    sqlite.exec("ALTER TABLE accounts ADD COLUMN typefully_api_key TEXT");
+  }
 
   migrateToMultiAccount(sqlite);
 }

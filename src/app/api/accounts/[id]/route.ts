@@ -12,6 +12,7 @@ const PatchSchema = z.object({
     .optional(),
   displayName: z.string().max(120).nullable().optional(),
   persona: z.string().max(2000).nullable().optional(),
+  typefullyApiKey: z.string().max(500).nullable().optional(),
 });
 
 export async function PATCH(
