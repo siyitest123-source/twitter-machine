@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { NoAccount } from "@/components/NoAccount";
 import { useAccount } from "@/lib/account-context";
@@ -461,6 +462,27 @@ function DraftCard({
           </button>
         </div>
       </div>
+
+      {tfState.kind === "err" && (
+        <div className="mt-3 px-3 py-2 bg-danger/10 border border-danger/40 rounded-md text-xs text-danger flex items-center gap-2 flex-wrap">
+          <span className="flex-1 min-w-0">{tfState.msg}</span>
+          {/no typefully api key/i.test(tfState.msg) && (
+            <Link
+              href="/accounts"
+              className="shrink-0 px-2 py-1 border border-danger/40 rounded hover:bg-danger/15 font-medium"
+            >
+              Add key in Accounts →
+            </Link>
+          )}
+          <button
+            onClick={() => setTfState({ kind: "idle" })}
+            className="shrink-0 text-muted hover:text-foreground"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
