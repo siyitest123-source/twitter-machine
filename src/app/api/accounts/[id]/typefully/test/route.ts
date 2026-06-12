@@ -51,8 +51,8 @@ export async function POST(
   }
 
   try {
-    await testTypefullyKey(apiKey);
-    return Response.json({ ok: true });
+    const result = await testTypefullyKey(apiKey);
+    return Response.json({ ok: true, socialSets: result.socialSets });
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : String(e) },

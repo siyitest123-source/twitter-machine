@@ -63,6 +63,9 @@ export async function POST(
       text: draft.text,
       threadParts,
       scheduleDateISO,
+      handle: account.handle,
+      replyToUrl:
+        draft.type === "reply" && draft.sourceUrl ? draft.sourceUrl : null,
     });
 
     const [updated] = await db

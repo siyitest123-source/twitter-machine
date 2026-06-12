@@ -137,7 +137,10 @@ function AccountCard({
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tfTest, setTfTest] = useState<
-    { kind: "idle" } | { kind: "testing" } | { kind: "ok" } | { kind: "err"; msg: string }
+    | { kind: "idle" }
+    | { kind: "testing" }
+    | { kind: "ok"; socialSets: number }
+    | { kind: "err"; msg: string }
   >({ kind: "idle" });
 
   async function save() {
@@ -166,7 +169,8 @@ function AccountCard({
         },
       );
       const d = await r.json();
-      if (r.ok && d.ok) setTfTest({ kind: "ok" });
+      if (r.ok && d.ok)
+        setTfTest({ kind: "ok", socialSets: d.socialSets ?? 0 });
       else setTfTest({ kind: "err", msg: d.error ?? "failed" });
     } catch (e) {
       setTfTest({
@@ -253,7 +257,10 @@ function AccountCard({
             </div>
             <div className="mt-1.5 text-xs min-h-[1.25rem]">
               {tfTest.kind === "ok" && (
-                <span className="text-success">✓ Connection works.</span>
+                <span className="text-success">
+                  ✓ Connection works — {tfTest.socialSets} connected account
+                  {tfTest.socialSets === 1 ? "" : "s"} reachable.
+                </span>
               )}
               {tfTest.kind === "err" && (
                 <span className="text-danger">{tfTest.msg}</span>
