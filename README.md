@@ -30,51 +30,84 @@ When you mark a draft **posted** (in the queue) and log its numbers (in Performa
 
 Coming next (when you want): scheduled auto-posting once you have X API access; engagement auto-pull instead of manual entry.
 
-## Setup
+## Setup (fresh machine)
 
-1. LLM access uses your **Claude Code subscription** by default (via `@anthropic-ai/claude-agent-sdk`) — no API key needed. To switch to pay-as-you-go API billing instead, add to `.env.local`:
+Prereqs: **Node 20+** (22 recommended) and, on macOS, the Xcode Command Line
+Tools (`xcode-select --install`) — `better-sqlite3` is a native module that
+compiles during install.
 
-   ```
-   ANTHROPIC_API_KEY=sk-ant-...
-   ```
+```bash
+git clone https://github.com/siyitest123-source/twitter-machine.git
+cd twitter-machine
+npm install
+```
 
-   Get one at https://console.anthropic.com/
+**1. LLM access (the generation engine) — pick ONE:**
 
-2. Install dependencies (already done if you used the scaffolder):
+- **Claude subscription (recommended, no per-token cost):** install
+  [Claude Code](https://claude.com/claude-code) and run `claude` once to log
+  in with your Pro/Max account. Leave `ANTHROPIC_API_KEY` unset. Generation
+  routes through your subscription via `@anthropic-ai/claude-agent-sdk`,
+  which reads the login from `~/.claude`. Fine for interactive use;
+  rate-limited if you mass-generate.
+- **API key (pay-as-you-go):** create `.env.local` in the project root with
+  `ANTHROPIC_API_KEY=sk-ant-...` from https://console.anthropic.com/.
+  No Claude Code install needed.
 
-   ```bash
-   npm install
-   ```
+**2. Optional integrations** (each feature degrades gracefully without its key):
 
-3. Run dev server:
+- **AI images** — add `FAL_KEY=...` to `.env.local`
+  (https://fal.ai, free $5 credit; ~$0.003/image).
+- **Typefully team review** — no env var. Paste the API key per account in
+  the **Accounts** page UI (Typefully Pro → Settings → API). Stored in the
+  local database, not in the repo.
 
-   ```bash
-   npm run dev
-   ```
+**3. Build and run:**
 
-   Open http://localhost:3000
+```bash
+npm run build
+npm start          # production server at http://localhost:3000
+```
 
-The SQLite database is auto-created at `./data/twitter-machine.db` on first request. Delete the file to reset.
+Use `npm run dev` only while actively editing code — dev mode runs a watcher
+that burns multiple CPU cores; production mode idles at ~0%.
+
+**Optional — keep it running on macOS:** create a LaunchAgent so the server
+starts at login and restarts on crash. See `~/Library/LaunchAgents/` pattern
+in the repo discussion, or just keep a terminal open with `npm start`.
+
+### Where your data lives
+
+Everything stateful is **outside the repo** in `~/.twitter-factory/`:
+
+| Path | Contents |
+|---|---|
+| `~/.twitter-factory/twitter-machine.db` | accounts, voice samples, targets, drafts, metrics, Typefully keys |
+| `~/.twitter-factory/images/` | generated images |
+
+Override with `TWITTER_FACTORY_DB_PATH` / `TWITTER_FACTORY_IMAGES_DIR`.
+Delete the directory to reset. **Moving to a new machine?** Copy
+`~/.twitter-factory/` over (e.g. AirDrop the folder) and all your trained
+voices, drafts, and Typefully keys come with you — the repo itself carries
+no data.
 
 ## Recommended first run
 
-1. Go to **Voice Training** and paste 30–100 of your past tweets (separated by blank lines or `---`).
-2. Go to **Target Accounts** and add the 10–30 accounts you care about most.
-3. See a tweet you want to react to? Go to **Generate**, paste it, pick mode, generate.
-4. Review candidates in the **Approval Queue**. Edit, approve, copy, post.
+1. Go to **Accounts** and create your first handle (+ persona).
+2. Go to **Voice Training** and paste 30–100 of your past tweets (separated by blank lines or `---`).
+3. Go to **Create** (or hit ⌘K from anywhere), pick a content type, write a brief, generate.
+4. Preview the candidates inline — edit, regenerate, or save the ones you like.
+5. Review in the **Queue**: approve, generate an image, send to Typefully.
 
-## For collaborators (read this first)
+## For collaborators
 
-After `git clone` and `npm install`:
+Same setup as above. Two things to know:
 
-**1. LLM access — each person sets up their own.** There are two ways; pick one:
-
-- **Claude subscription (no per-token cost):** install [Claude Code](https://claude.com/claude-code), run `claude` once to log in, and leave `ANTHROPIC_API_KEY` unset. Generation routes through your own subscription via `@anthropic-ai/claude-agent-sdk`. Note: rate-limited for heavy use.
-- **API key (pay-as-you-go):** create `.env.local` with `ANTHROPIC_API_KEY=sk-ant-...` from https://console.anthropic.com/. Best for higher volume.
-
-There is **no shared key in the repo** — `.env.local` is gitignored on purpose.
-
-**2. Data is local, not shared.** Voice samples, targets, drafts, and metrics live in `./data/twitter-machine.db`, which is gitignored. Everyone gets their own empty database. The schema auto-creates on first run. If you want a *shared* content pipeline (same queue + voice library for the whole team), migrate to a hosted Postgres — see "Going multiplayer" below.
+- **No shared keys in the repo.** `.env.local` is gitignored; Typefully keys
+  live in each person's local DB. Everyone brings their own LLM auth.
+- **Data is per-machine, not shared.** Everyone gets an empty database on
+  first run. For a *shared* content pipeline (same queue + voice library for
+  the whole team), migrate to a hosted Postgres — see "Going multiplayer".
 
 ## Going multiplayer (shared content pipeline)
 
