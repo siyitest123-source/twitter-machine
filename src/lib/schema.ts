@@ -81,6 +81,32 @@ export const drafts = sqliteTable("drafts", {
     .default(sql`(unixepoch())`),
 });
 
+export const discoveredTweets = sqliteTable(
+  "discovered_tweets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    accountId: integer("account_id").notNull(),
+    sourceTweetId: text("source_tweet_id").notNull(),
+    sourceHandle: text("source_handle"),
+    sourceUrl: text("source_url"),
+    sourceText: text("source_text").notNull(),
+    tweetCreatedAt: integer("tweet_created_at"),
+    likes: integer("likes").notNull().default(0),
+    retweets: integer("retweets").notNull().default(0),
+    relevance: integer("relevance").notNull().default(0), // 0-10 from Claude triage
+    replyDraft: text("reply_draft"),
+    qrtDraft: text("qrt_draft"),
+    status: text("status", { enum: ["new", "actioned", "dismissed"] })
+      .notNull()
+      .default("new"),
+    scannedAt: integer("scanned_at")
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [unique().on(t.accountId, t.sourceTweetId)],
+);
+
+export type DiscoveredTweet = typeof discoveredTweets.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type VoiceSample = typeof voiceSamples.$inferSelect;

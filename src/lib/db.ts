@@ -103,9 +103,28 @@ function ensureSchema(sqlite: Database.Database) {
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
+    CREATE TABLE IF NOT EXISTS discovered_tweets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      source_tweet_id TEXT NOT NULL,
+      source_handle TEXT,
+      source_url TEXT,
+      source_text TEXT NOT NULL,
+      tweet_created_at INTEGER,
+      likes INTEGER NOT NULL DEFAULT 0,
+      retweets INTEGER NOT NULL DEFAULT 0,
+      relevance INTEGER NOT NULL DEFAULT 0,
+      reply_draft TEXT,
+      qrt_draft TEXT,
+      status TEXT NOT NULL DEFAULT 'new',
+      scanned_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      UNIQUE(account_id, source_tweet_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
     CREATE INDEX IF NOT EXISTS idx_drafts_created_at ON drafts(created_at);
     CREATE INDEX IF NOT EXISTS idx_drafts_scheduled_for ON drafts(scheduled_for);
+    CREATE INDEX IF NOT EXISTS idx_disc_account_status ON discovered_tweets(account_id, status);
   `);
   // NOTE: account_id indexes are created at the end of migrateToMultiAccount,
   // after the columns are guaranteed to exist (an existing install won't have

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AutoScan } from "@/components/AutoScan";
 import { NoAccount } from "@/components/NoAccount";
 import { useAccount } from "@/lib/account-context";
 
@@ -114,33 +115,47 @@ export default function DiscoverPage() {
 
   return (
     <div className="p-10 max-w-4xl">
-      <h1 className="text-3xl font-semibold mb-1">Discover Trends</h1>
+      <h1 className="text-3xl font-semibold mb-1">Discover</h1>
       <p className="text-muted mb-6">
-        Paste 10–30 recent tweets from your crypto feed (one per block, blank
-        line between, optionally <code>@handle: text</code>). The model clusters
-        them into narratives and suggests proactive posts to ride or counter
-        each one.
+        Auto-scan your target accounts for tweets worth engaging with, or paste
+        a feed manually to cluster it into narratives.
       </p>
 
-      <div className="bg-surface border border-border rounded-lg p-5 mb-6">
-        <textarea
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          rows={10}
-          placeholder={`@cobie: another L2 launches with a $50M valuation and the only differentiator is the color of their logo\n\n@hosseeb: restaking yields are about to compress hard. nobody is pricing this in\n\nhyperliquid volumes hit ATH again. the cex-killer thesis is real this time`}
-          className="w-full bg-background border border-border rounded-md p-3 text-sm font-mono resize-y focus:outline-none focus:border-accent"
-        />
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-muted">{parsed.length} tweets detected</span>
-          <button
-            onClick={analyze}
-            disabled={parsed.length < 2 || loading}
-            className="px-4 py-2 bg-accent text-accent-fg rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {loading ? "Analyzing…" : "Find narratives"}
-          </button>
+      {/* Auto-scan: fetches target accounts, drafts engagement per tweet */}
+      <AutoScan accountId={currentId} />
+
+      {/* Manual narrative clustering — kept for when you want to paste a feed */}
+      <details className="bg-surface border border-border rounded-lg mb-6">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-mono uppercase tracking-wider text-muted hover:text-foreground">
+          Manual: paste a feed → narrative clusters
+        </summary>
+        <div className="px-5 pb-5">
+          <p className="text-xs text-muted mb-3">
+            Paste recent tweets (one per block, blank line between, optionally{" "}
+            <code>@handle: text</code>). Clusters them into narratives and
+            suggests proactive posts.
+          </p>
+          <textarea
+            value={raw}
+            onChange={(e) => setRaw(e.target.value)}
+            rows={8}
+            placeholder={`@cobie: another L2 launches with a $50M valuation and the only differentiator is the color of their logo\n\n@hosseeb: restaking yields are about to compress hard. nobody is pricing this in`}
+            className="w-full bg-background border border-border rounded-md p-3 text-sm font-mono resize-y focus:outline-none focus:border-accent"
+          />
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-xs text-muted">
+              {parsed.length} tweets detected
+            </span>
+            <button
+              onClick={analyze}
+              disabled={parsed.length < 2 || loading}
+              className="px-4 py-2 bg-accent text-accent-fg rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {loading ? "Analyzing…" : "Find narratives"}
+            </button>
+          </div>
         </div>
-      </div>
+      </details>
 
       {err && (
         <div className="mb-4 p-4 bg-surface border border-danger rounded-md text-sm text-danger">
