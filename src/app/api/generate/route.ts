@@ -3,7 +3,6 @@ import { z } from "zod";
 import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
 import { getDb } from "@/lib/db";
-import { getTopPerformers } from "@/lib/performance";
 import { buildGenerationPrompt, type DraftType } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
 
@@ -62,20 +61,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "unknown accountId" }, { status: 400 });
   }
 
-  const [samples, topPerformers] = await Promise.all([
-    db
-      .select()
-      .from(voiceSamples)
-      .where(eq(voiceSamples.accountId, account.id)),
-    getTopPerformers(db, account.id, 5),
-  ]);
-  // Posts that actually performed get folded into the voice pool so the
-  // generator leans toward what worked — scoped to this account only.
-  const voicePool = [...topPerformers, ...samples];
+  const samples = await db
+    .select()
+    .from(voiceSamples)
+    .where(eq(voiceSamples.accountId, account.id));
 
   const { system, user } = buildGenerationPrompt({
     type: input.type as DraftType,
-    voiceSamples: voicePool,
+    voiceSamples: samples,
     persona: account.persona,
     sourceText: input.sourceText,
     sourceHandle: input.sourceHandle,

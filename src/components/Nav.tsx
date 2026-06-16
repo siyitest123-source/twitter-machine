@@ -8,7 +8,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   IconAccounts,
   IconCalendar,
-  IconChart,
   IconChevDown,
   IconCheck,
   IconCompass,
@@ -31,16 +30,15 @@ type Item = {
 // Top-bar primary nav (4 visible). Everything else folds into the More menu.
 const PRIMARY: Item[] = [
   { href: "/", label: "Home", Icon: IconHome },
+  { href: "/discover", label: "Discover", Icon: IconCompass },
   { href: "/queue", label: "Queue", Icon: IconQueue },
   { href: "/calendar", label: "Calendar", Icon: IconCalendar },
-  { href: "/performance", label: "Performance", Icon: IconChart },
 ];
 
 const MORE: { divider: string; items: Item[] }[] = [
   {
     divider: "Power tools",
     items: [
-      { href: "/discover", label: "Discover", Icon: IconCompass },
       { href: "/generate", label: "Generate (raw)", Icon: IconSparkLine },
       { href: "/plan", label: "Weekly plan (raw)", Icon: IconCalendar },
     ],

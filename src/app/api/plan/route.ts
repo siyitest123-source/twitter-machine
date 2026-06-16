@@ -3,7 +3,6 @@ import { z } from "zod";
 import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
 import { getDb } from "@/lib/db";
-import { getTopPerformers } from "@/lib/performance";
 import { buildWeeklyPlanPrompt, type PlannedPost } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
 
@@ -58,13 +57,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "unknown accountId" }, { status: 400 });
   }
 
-  const [samples, topPerformers] = await Promise.all([
-    db.select().from(voiceSamples).where(eq(voiceSamples.accountId, account.id)),
-    getTopPerformers(db, account.id, 5),
-  ]);
+  const samples = await db
+    .select()
+    .from(voiceSamples)
+    .where(eq(voiceSamples.accountId, account.id));
 
   const { system, user } = buildWeeklyPlanPrompt({
-    voiceSamples: [...topPerformers, ...samples],
+    voiceSamples: samples,
     persona: account.persona,
     brief: input.brief,
     requirements: input.requirements,
