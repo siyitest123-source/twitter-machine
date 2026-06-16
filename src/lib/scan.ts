@@ -13,7 +13,9 @@ import { fetchRecentTweets, type TimelineTweet } from "@/lib/timeline-fetch";
 const RELEVANCE_THRESHOLD = 5; // store tweets the model rates >= this
 const MAX_TWEETS_PER_SCAN = 25; // cap Claude work per scan
 const PER_HANDLE_MAX = 10;
-const SINCE_HOURS = 24;
+const SINCE_HOURS = 72; // wider than a day so a manual "Scan now" surfaces
+// something for normally-active accounts; dedup keeps the daily run from
+// re-surfacing tweets already reviewed.
 
 export type ScanSummary = {
   accountId: number;
@@ -23,6 +25,21 @@ export type ScanSummary = {
   stored: number;
   fetchErrors: { handle: string; error: string }[];
 };
+
+/** Parse a comma/newline/space-separated handle blob into clean screen names. */
+export function parseHandles(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const tok of raw.split(/[\s,]+/)) {
+    const h = tok.trim().replace(/^@/, "").replace(/^https?:\/\/(x|twitter)\.com\//i, "").split(/[/?]/)[0];
+    if (/^[A-Za-z0-9_]{1,15}$/.test(h) && !seen.has(h.toLowerCase())) {
+      seen.add(h.toLowerCase());
+      out.push(h);
+    }
+  }
+  return out;
+}
 
 type Triage = {
   i: number;
@@ -44,24 +61,35 @@ function extractJsonArray(text: string): Triage[] {
 }
 
 /**
- * Scan an account's engage/amplify targets for recent tweets worth engaging
- * with. Fetches timelines, dedupes against what's already been discovered,
- * runs one batched Claude triage call (relevance + reply + QRT in the
- * account's voice), and stores the keepers as `discovered_tweets` rows.
+ * Scan a set of public accounts for recent tweets worth engaging with.
+ * Fetches each handle's last-24h timeline, dedupes against what's already
+ * been discovered, runs one batched Claude triage call (relevance + reply +
+ * QRT in the account's voice), and stores the keepers as `discovered_tweets`.
+ *
+ * Handle resolution order: explicit `handles` arg → the account's saved
+ * `scanHandles` → (legacy fallback) its engage/amplify target list.
  */
-export async function runScan(accountId: number): Promise<ScanSummary> {
+export async function runScan(
+  accountId: number,
+  handles?: string[],
+): Promise<ScanSummary> {
   const db = getDb();
   const account = await getAccount(db, accountId);
   if (!account) throw new Error("unknown account");
 
-  const targets = await db
-    .select()
-    .from(targetAccounts)
-    .where(eq(targetAccounts.accountId, accountId));
-
-  const engageTargets = targets.filter(
-    (t) => t.engagementMode === "engage" || t.engagementMode === "amplify",
-  );
+  let toScan = handles && handles.length ? handles : parseHandles(account.scanHandles);
+  if (toScan.length === 0) {
+    // Legacy fallback: engage/amplify targets, for installs that set those up.
+    const targets = await db
+      .select()
+      .from(targetAccounts)
+      .where(eq(targetAccounts.accountId, accountId));
+    toScan = targets
+      .filter((t) => t.engagementMode === "engage" || t.engagementMode === "amplify")
+      .map((t) => t.handle);
+  }
+  // Dedupe + clean once more.
+  toScan = parseHandles(toScan.join(","));
 
   const summary: ScanSummary = {
     accountId,
@@ -72,27 +100,27 @@ export async function runScan(accountId: number): Promise<ScanSummary> {
     fetchErrors: [],
   };
 
-  if (engageTargets.length === 0) return summary;
+  if (toScan.length === 0) return summary;
 
   // 1. Fetch timelines — sequential with polite spacing so we don't trip
   //    the syndication endpoint's burst rate limit.
   const fetched: (TimelineTweet & { handle: string })[] = [];
-  for (let i = 0; i < engageTargets.length; i++) {
-    const t = engageTargets[i];
+  for (let i = 0; i < toScan.length; i++) {
+    const handle = toScan[i];
     try {
-      const tweets = await fetchRecentTweets(t.handle, {
+      const tweets = await fetchRecentTweets(handle, {
         sinceHours: SINCE_HOURS,
         max: PER_HANDLE_MAX,
       });
-      for (const tw of tweets) fetched.push({ ...tw, handle: t.handle });
+      for (const tw of tweets) fetched.push({ ...tw, handle });
       summary.handlesScanned += 1;
     } catch (e) {
       summary.fetchErrors.push({
-        handle: t.handle,
+        handle,
         error: e instanceof Error ? e.message : String(e),
       });
     }
-    if (i < engageTargets.length - 1) {
+    if (i < toScan.length - 1) {
       await new Promise((r) => setTimeout(r, 1500));
     }
   }

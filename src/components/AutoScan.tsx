@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAccount } from "@/lib/account-context";
 import type { DiscoveredTweet } from "@/lib/schema";
 
 type ScanSummary = {
@@ -19,12 +20,28 @@ function ago(unix: number | null): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+function countHandles(raw: string): number {
+  return new Set(
+    raw
+      .split(/[\s,]+/)
+      .map((t) => t.trim().replace(/^@/, "").toLowerCase())
+      .filter((t) => /^[a-z0-9_]{1,15}$/.test(t)),
+  ).size;
+}
+
 export function AutoScan({ accountId }: { accountId: number }) {
+  const { current, refresh } = useAccount();
+  const [handles, setHandles] = useState("");
   const [items, setItems] = useState<DiscoveredTweet[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [summary, setSummary] = useState<ScanSummary | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // Prefill the handle box from this account's saved scan list.
+  useEffect(() => {
+    setHandles(current?.scanHandles ?? "");
+  }, [current?.id, current?.scanHandles]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,6 +55,8 @@ export function AutoScan({ accountId }: { accountId: number }) {
     load();
   }, [load]);
 
+  const handleCount = countHandles(handles);
+
   async function scanNow() {
     setScanning(true);
     setErr(null);
@@ -46,13 +65,13 @@ export function AutoScan({ accountId }: { accountId: number }) {
       const r = await fetch("/api/discover/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId }),
+        body: JSON.stringify({ accountId, handles }),
       });
       const d = await r.json();
       if (!r.ok) setErr(d.error ?? "scan failed");
       else {
         setSummary(d);
-        await load();
+        await Promise.all([load(), refresh()]); // refresh so saved handles persist in context
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -66,24 +85,38 @@ export function AutoScan({ accountId }: { accountId: number }) {
 
   return (
     <div className="mb-10">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-sm font-mono uppercase tracking-wider text-muted">
-            Auto-scan · target accounts
-          </h2>
-          <p className="text-xs text-muted mt-1">
-            Pulls the last 24h from your engage/amplify targets and drafts
-            engagement in this account&apos;s voice. Runs daily at 8:00 CEST;
-            scan anytime below.
-          </p>
+      <div className="mb-4">
+        <h2 className="text-sm font-mono uppercase tracking-wider text-muted">
+          Scan accounts
+        </h2>
+        <p className="text-xs text-muted mt-1">
+          Enter the handles to watch. Pulls each one&apos;s recent tweets
+          and drafts engagement in this account&apos;s voice. Saved per account
+          and re-scanned daily at 8:00 CEST.
+        </p>
+      </div>
+
+      <div className="bg-surface border border-border rounded-lg p-4 mb-4">
+        <textarea
+          value={handles}
+          onChange={(e) => setHandles(e.target.value)}
+          rows={3}
+          placeholder={`@cobie  @hosseeb  @VitalikButerin\n…or one per line, commas, or pasted profile URLs`}
+          className="w-full bg-background border border-border rounded-md p-3 text-sm font-mono resize-y focus:outline-none focus:border-accent"
+        />
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-muted">
+            {handleCount} handle{handleCount === 1 ? "" : "s"} · public accounts
+            only
+          </span>
+          <button
+            onClick={scanNow}
+            disabled={scanning || handleCount === 0}
+            className="px-4 py-2 bg-accent text-accent-fg rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          >
+            {scanning ? "Scanning…" : "Scan now"}
+          </button>
         </div>
-        <button
-          onClick={scanNow}
-          disabled={scanning}
-          className="px-4 py-2 bg-accent text-accent-fg rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-        >
-          {scanning ? "Scanning…" : "Scan now"}
-        </button>
       </div>
 
       {err && (
@@ -110,12 +143,8 @@ export function AutoScan({ accountId }: { accountId: number }) {
         <div className="text-sm text-muted">Loading…</div>
       ) : items.length === 0 ? (
         <div className="text-muted text-sm border border-dashed border-border rounded-lg p-8 text-center">
-          Nothing to review. Hit <strong>Scan now</strong> — make sure the
-          account has <em>engage</em> or <em>amplify</em> targets in{" "}
-          <a href="/targets" className="text-accent underline">
-            Targets
-          </a>
-          .
+          Nothing to review yet. Add some handles above and hit{" "}
+          <strong>Scan now</strong>.
         </div>
       ) : (
         <div className="space-y-3">

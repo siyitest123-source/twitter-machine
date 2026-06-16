@@ -12,6 +12,7 @@ export const accounts = sqliteTable("accounts", {
   displayName: text("display_name"),
   persona: text("persona"), // short description of this account's role/voice/tone
   typefullyApiKey: text("typefully_api_key"), // per-account, used by /api/drafts/[id]/typefully
+  scanHandles: text("scan_handles"), // comma/newline-separated handles for Discover auto-scan
   createdAt: integer("created_at")
     .notNull()
     .default(sql`(unixepoch())`),

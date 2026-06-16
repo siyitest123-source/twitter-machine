@@ -55,6 +55,7 @@ function ensureSchema(sqlite: Database.Database) {
       display_name TEXT,
       persona TEXT,
       typefully_api_key TEXT,
+      scan_handles TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
@@ -151,10 +152,13 @@ function ensureSchema(sqlite: Database.Database) {
   addDraftColumn("typefully_url", "typefully_url TEXT");
   addDraftColumn("typefully_sent_at", "typefully_sent_at INTEGER");
 
-  // Idempotent migration for the accounts.typefully_api_key column.
+  // Idempotent migrations for later accounts columns.
   const acctCols = columnNames(sqlite, "accounts");
   if (!acctCols.has("typefully_api_key")) {
     sqlite.exec("ALTER TABLE accounts ADD COLUMN typefully_api_key TEXT");
+  }
+  if (!acctCols.has("scan_handles")) {
+    sqlite.exec("ALTER TABLE accounts ADD COLUMN scan_handles TEXT");
   }
 
   migrateToMultiAccount(sqlite);

@@ -2,11 +2,15 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveAccountId } from "@/lib/accounts";
 import { getDb } from "@/lib/db";
-import { runScan } from "@/lib/scan";
-import { discoveredTweets } from "@/lib/schema";
+import { parseHandles, runScan } from "@/lib/scan";
+import { accounts, discoveredTweets } from "@/lib/schema";
 
 const PostSchema = z.object({
   accountId: z.number().int().positive(),
+  // Freeform handles to scan (the Discover input box). When provided they're
+  // saved to the account so the daily 8am job reuses them. Omit (e.g. the
+  // cron) to scan the account's saved handles.
+  handles: z.string().max(2000).optional(),
 });
 
 /** POST /api/discover/scan — run a scan now (manual button + the 8am cron). */
@@ -15,8 +19,21 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: "accountId required" }, { status: 400 });
   }
+  const { accountId, handles } = parsed.data;
+  const db = getDb();
+
+  // If the caller passed handles, persist them as this account's scan list.
+  let list: string[] | undefined;
+  if (handles !== undefined) {
+    list = parseHandles(handles);
+    await db
+      .update(accounts)
+      .set({ scanHandles: list.join("\n") })
+      .where(eq(accounts.id, accountId));
+  }
+
   try {
-    const summary = await runScan(parsed.data.accountId);
+    const summary = await runScan(accountId, list);
     return Response.json(summary);
   } catch (e) {
     return Response.json(
