@@ -12,6 +12,7 @@ import { fetchRecentTweets, type TimelineTweet } from "@/lib/timeline-fetch";
 
 const RELEVANCE_THRESHOLD = 5; // store tweets the model rates >= this
 const MAX_TWEETS_PER_SCAN = 25; // cap Claude work per scan
+const MAX_HANDLES_PER_SCAN = 12; // cap endpoint hits per scan
 const PER_HANDLE_MAX = 10;
 const SINCE_HOURS = 72; // wider than a day so a manual "Scan now" surfaces
 // something for normally-active accounts; dedup keeps the daily run from
@@ -88,8 +89,9 @@ export async function runScan(
       .filter((t) => t.engagementMode === "engage" || t.engagementMode === "amplify")
       .map((t) => t.handle);
   }
-  // Dedupe + clean once more.
-  toScan = parseHandles(toScan.join(","));
+  // Dedupe + clean once more, then cap how many we hit per scan to stay
+  // gentle on the endpoint's rate limit (cache covers repeats within 30m).
+  toScan = parseHandles(toScan.join(",")).slice(0, MAX_HANDLES_PER_SCAN);
 
   const summary: ScanSummary = {
     accountId,

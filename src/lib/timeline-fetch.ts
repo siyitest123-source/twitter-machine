@@ -20,6 +20,14 @@ export type TimelineTweet = {
   url: string;
 };
 
+// In-memory cache of successful fetches, keyed by screen name. A re-scan of
+// the same handle within the TTL returns instantly without touching the
+// endpoint — the main defense against tripping its burst rate limit when you
+// scan repeatedly. The launchd server is long-lived so this persists between
+// requests; it resets on restart (fine — it's only a throttle shield).
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const cache = new Map<string, { at: number; tweets: TimelineTweet[] }>();
+
 type RawTweet = {
   id_str?: string;
   full_text?: string;
@@ -70,6 +78,14 @@ export async function fetchRecentTweets(
   const sinceHours = opts.sinceHours ?? 24;
   const max = opts.max ?? 25;
   const cutoff = Date.now() / 1000 - sinceHours * 3600;
+
+  // Cache hit → skip the endpoint entirely.
+  const cached = cache.get(screen.toLowerCase());
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return cached.tweets
+      .filter((t) => !t.createdAt || t.createdAt >= cutoff)
+      .slice(0, max);
+  }
 
   const url = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${screen}?showReplies=false&lang=en`;
 
@@ -131,20 +147,20 @@ export async function fetchRecentTweets(
     throw new Error(`@${screen}: timeline data could not be parsed`);
   }
 
-  const out: TimelineTweet[] = [];
+  // Collect ALL original tweets (no cutoff/max cap) so the cache can serve
+  // any window; filtering happens on the way out and on cache hits.
+  const all: TimelineTweet[] = [];
   for (const entry of entries) {
     const t = findFirstTweet(entry);
     if (!t || !t.id_str) continue;
     if (t.retweeted_status) continue; // skip pure retweets
     if (!opts.includeReplies && t.in_reply_to_status_id_str) continue;
 
-    const createdAt = t.created_at ? Date.parse(t.created_at) / 1000 : 0;
-    if (createdAt && createdAt < cutoff) continue;
-
     const text = (t.note_tweet?.text ?? t.full_text ?? t.text ?? "").trim();
     if (!text) continue;
 
-    out.push({
+    const createdAt = t.created_at ? Date.parse(t.created_at) / 1000 : 0;
+    all.push({
       id: t.id_str,
       text,
       createdAt: Math.floor(createdAt),
@@ -152,8 +168,11 @@ export async function fetchRecentTweets(
       retweets: t.retweet_count ?? 0,
       url: `https://x.com/${screen}/status/${t.id_str}`,
     });
-    if (out.length >= max) break;
   }
 
-  return out;
+  cache.set(screen.toLowerCase(), { at: Date.now(), tweets: all });
+
+  return all
+    .filter((t) => !t.createdAt || t.createdAt >= cutoff)
+    .slice(0, max);
 }
