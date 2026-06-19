@@ -75,14 +75,35 @@ export async function fetchRecentTweets(
 
   // The syndication endpoint rate-limits bursts (429). Retry once with a
   // short backoff — fine for a low-frequency daily scan.
-  let res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "text/html" },
-  });
-  if (res.status === 429) {
-    await new Promise((r) => setTimeout(r, 4000));
-    res = await fetch(url, {
-      headers: { "User-Agent": UA, Accept: "text/html" },
-    });
+  // Each request gets a hard 10s timeout via AbortController — without it a
+  // throttled/slow response can hold the connection open indefinitely and
+  // stall the whole scan. On 429, retry with bounded backoff.
+  async function timedFetch(): Promise<Response> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    try {
+      return await fetch(url, {
+        headers: { "User-Agent": UA, Accept: "text/html" },
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  const backoffsMs = [4000, 10000]; // 2 retries; worst case ~44s/handle
+  let res: Response;
+  try {
+    res = await timedFetch();
+    for (let i = 0; res.status === 429 && i < backoffsMs.length; i++) {
+      await new Promise((r) => setTimeout(r, backoffsMs[i]));
+      res = await timedFetch();
+    }
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error(`@${screen}: timed out (endpoint slow or throttled)`);
+    }
+    throw e;
   }
   if (res.status === 429) {
     throw new Error(

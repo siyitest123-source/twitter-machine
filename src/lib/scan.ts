@@ -121,7 +121,7 @@ export async function runScan(
       });
     }
     if (i < toScan.length - 1) {
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 3000));
     }
   }
   summary.tweetsFetched = fetched.length;
