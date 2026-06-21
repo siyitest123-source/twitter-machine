@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
+import { extractJson } from "@/lib/extract-json";
 import { getDb } from "@/lib/db";
 import { buildWeeklyPlanPrompt, type PlannedPost } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
@@ -19,12 +20,6 @@ const BodySchema = z.object({
   saveAsDrafts: z.boolean().optional(),
 });
 
-function extractJson<T>(text: string): T {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("model did not return JSON");
-  return JSON.parse(text.slice(start, end + 1)) as T;
-}
 
 function todayISO(): string {
   const d = new Date();
@@ -86,7 +81,7 @@ export async function POST(request: Request) {
       user,
       maxTurns: 1,
     });
-    modelOut = extractJson(text);
+    modelOut = extractJson<{ posts: PlannedPost[] }>(text);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return Response.json({ error: msg }, { status: 500 });

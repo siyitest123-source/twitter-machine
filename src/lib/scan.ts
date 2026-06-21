@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
 import { getDb } from "@/lib/db";
+import { extractJson } from "@/lib/extract-json";
 import {
   discoveredTweets,
   targetAccounts,
@@ -55,10 +56,7 @@ function pickSamples(samples: VoiceSample[], k = 12): VoiceSample[] {
 }
 
 function extractJsonArray(text: string): Triage[] {
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start === -1 || end === -1) throw new Error("model did not return a JSON array");
-  return JSON.parse(text.slice(start, end + 1)) as Triage[];
+  return extractJson<Triage[]>(text, "array");
 }
 
 /**

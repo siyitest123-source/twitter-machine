@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
+import { extractJson } from "@/lib/extract-json";
 import { getDb } from "@/lib/db";
 import { buildDiscoveryPrompt, type Narrative } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
@@ -19,12 +20,6 @@ const BodySchema = z.object({
     .max(50),
 });
 
-function extractJson<T>(text: string): T {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("model did not return JSON");
-  return JSON.parse(text.slice(start, end + 1)) as T;
-}
 
 export async function POST(request: Request) {
   const parsed = BodySchema.safeParse(await request.json());
@@ -56,7 +51,7 @@ export async function POST(request: Request) {
   let modelOut: { narratives: Narrative[]; skipped: string[] };
   try {
     const text = await generateText({ system, user, maxTurns: 1 });
-    modelOut = extractJson(text);
+    modelOut = extractJson<{ narratives: Narrative[]; skipped: string[] }>(text);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return Response.json({ error: msg }, { status: 500 });

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getAccount } from "@/lib/accounts";
 import { generateText } from "@/lib/claude";
+import { extractJson } from "@/lib/extract-json";
 import { getDb } from "@/lib/db";
 import { buildGenerationPrompt, type DraftType } from "@/lib/prompts";
 import { drafts, voiceSamples } from "@/lib/schema";
@@ -28,14 +29,8 @@ type ModelResponse = {
   skipped_reason: string | null;
 };
 
-function extractJson(text: string): ModelResponse {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1) {
-    throw new Error("model did not return JSON");
-  }
-  const slice = text.slice(start, end + 1);
-  return JSON.parse(slice) as ModelResponse;
+function extractModelResponse(text: string): ModelResponse {
+  return extractJson<ModelResponse>(text, "object");
 }
 
 export async function POST(request: Request) {
@@ -80,7 +75,7 @@ export async function POST(request: Request) {
   let modelOut: ModelResponse;
   try {
     const text = await generateText({ system, user });
-    modelOut = extractJson(text);
+    modelOut = extractModelResponse(text);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return Response.json({ error: msg }, { status: 500 });
