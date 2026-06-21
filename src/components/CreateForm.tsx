@@ -137,8 +137,8 @@ export function CreateForm({
         setResult({
           kind: "saved",
           count,
-          href: "/calendar",
-          label: `${count} posts scheduled · open Calendar`,
+          href: "/queue",
+          label: `${count} drafts saved · review in Queue`,
         });
         return;
       }

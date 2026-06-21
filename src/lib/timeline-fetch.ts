@@ -8,8 +8,42 @@
  * auto-Discover; if it breaks, manual paste in Discover still works.
  */
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileP = promisify(execFile);
+
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+/**
+ * Fetch a URL via the system `curl`, not Node's fetch. Twitter's
+ * syndication.twitter.com host fingerprints the HTTP client (TLS/HTTP2) and
+ * 429s Node's undici-based fetch even when curl with the identical URL +
+ * headers gets 200. So we shell out. Returns { status, body }.
+ */
+async function curlGet(
+  url: string,
+): Promise<{ status: number; body: string }> {
+  const marker = "\n__HTTP_STATUS__:";
+  try {
+    const { stdout } = await execFileP(
+      "curl",
+      ["-s", "-m", "15", "-A", UA, "-H", "Accept: text/html", "-w", `${marker}%{http_code}`, url],
+      { maxBuffer: 16 * 1024 * 1024, timeout: 20_000 },
+    );
+    const idx = stdout.lastIndexOf(marker);
+    if (idx === -1) return { status: 0, body: stdout };
+    return {
+      status: Number(stdout.slice(idx + marker.length).trim()) || 0,
+      body: stdout.slice(0, idx),
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/ENOENT/.test(msg)) throw new Error("curl not found on this system");
+    throw new Error(`curl failed: ${msg.slice(0, 200)}`);
+  }
+}
 
 export type TimelineTweet = {
   id: string;
@@ -89,47 +123,21 @@ export async function fetchRecentTweets(
 
   const url = `https://syndication.twitter.com/srv/timeline-profile/screen-name/${screen}?showReplies=false&lang=en`;
 
-  // The syndication endpoint rate-limits bursts (429). Retry once with a
-  // short backoff — fine for a low-frequency daily scan.
-  // Each request gets a hard 10s timeout via AbortController — without it a
-  // throttled/slow response can hold the connection open indefinitely and
-  // stall the whole scan. On 429, retry with bounded backoff.
-  async function timedFetch(): Promise<Response> {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10_000);
-    try {
-      return await fetch(url, {
-        headers: { "User-Agent": UA, Accept: "text/html" },
-        signal: ctrl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  const backoffsMs = [4000, 10000]; // 2 retries; worst case ~44s/handle
-  let res: Response;
-  try {
-    res = await timedFetch();
-    for (let i = 0; res.status === 429 && i < backoffsMs.length; i++) {
-      await new Promise((r) => setTimeout(r, backoffsMs[i]));
-      res = await timedFetch();
-    }
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
-      throw new Error(`@${screen}: timed out (endpoint slow or throttled)`);
-    }
-    throw e;
+  // Fetch via curl (see curlGet). On 429 retry once with a short backoff.
+  let res = await curlGet(url);
+  if (res.status === 429) {
+    await new Promise((r) => setTimeout(r, 4000));
+    res = await curlGet(url);
   }
   if (res.status === 429) {
     throw new Error(
       `@${screen}: rate-limited by Twitter's public endpoint — try again in a few minutes`,
     );
   }
-  if (!res.ok) {
+  if (res.status !== 200) {
     throw new Error(`timeline ${res.status} for @${screen}`);
   }
-  const html = await res.text();
+  const html = res.body;
   const m = html.match(
     /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
   );

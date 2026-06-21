@@ -31,11 +31,18 @@ function todayISO(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-function scheduledForUnix(startISO: string, dayOffset: number, hourUtc: number) {
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Human-readable "suggested: Mon 14:00 UTC" hint, stored in the draft's angle. */
+function suggestionHint(
+  startISO: string,
+  dayOffset: number,
+  hourUtc: number,
+): string {
   const [y, m, d] = startISO.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d, hourUtc, 0, 0));
+  const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + dayOffset);
-  return Math.floor(dt.getTime() / 1000);
+  return `suggested ${DAY_NAMES[dt.getUTCDay()]} ${String(hourUtc).padStart(2, "0")}:00 UTC`;
 }
 
 export async function POST(request: Request) {
@@ -94,22 +101,30 @@ export async function POST(request: Request) {
     saved = await db
       .insert(drafts)
       .values(
-        posts.map((p) => ({
-          accountId: account.id,
-          type: p.type === "thread" ? ("thread" as const) : ("original" as const),
-          text: p.text,
-          threadParts:
-            p.type === "thread" && p.thread_continuation?.length
-              ? JSON.stringify(p.thread_continuation)
-              : null,
-          angle: p.angle ?? null,
-          status: "pending" as const,
-          scheduledFor: scheduledForUnix(
+        posts.map((p) => {
+          const hint = suggestionHint(
             startISO,
             Math.max(0, Math.min(daysInWeek - 1, p.day_offset)),
             Math.max(0, Math.min(23, p.suggested_hour_utc ?? 14)),
-          ),
-        })),
+          );
+          return {
+            accountId: account.id,
+            type:
+              p.type === "thread" ? ("thread" as const) : ("original" as const),
+            text: p.text,
+            threadParts:
+              p.type === "thread" && p.thread_continuation?.length
+                ? JSON.stringify(p.thread_continuation)
+                : null,
+            // Fold the model's timing suggestion into the angle as a hint;
+            // do NOT pre-schedule. Posts land as unscheduled pending drafts so
+            // you review them in the Queue and schedule (drag onto Calendar)
+            // when you're ready.
+            angle: p.angle ? `${p.angle} · ${hint}` : hint,
+            status: "pending" as const,
+            scheduledFor: null,
+          };
+        }),
       )
       .returning();
   }

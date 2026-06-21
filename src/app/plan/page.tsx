@@ -91,8 +91,8 @@ export default function PlanPage() {
       <h1 className="text-3xl font-semibold mb-1">Weekly Plan</h1>
       <p className="text-muted mb-6">
         Write a brief for the week — what you want to post about, what&apos;s
-        happening, the story you want to tell. It generates a calendar of posts
-        and threads in your voice, scheduled by day and suggested hour. Saved
+        happening, the story you want to tell. It generates a week of posts and
+        threads in your voice, each with a suggested day and hour. Saved
         to the queue.
       </p>
 
@@ -187,12 +187,17 @@ export default function PlanPage() {
       )}
       {savedCount !== null && (
         <div className="mb-4 p-3 bg-surface border border-success/40 rounded-md text-sm">
-          <span className="text-success font-medium">{savedCount}</span> posts
-          saved to the queue with scheduled dates. Review them in{" "}
+          <span className="text-success font-medium">{savedCount}</span> drafts
+          saved (unscheduled, with a suggested time on each). Review and
+          schedule them in the{" "}
           <a className="underline" href="/queue">
-            Approval Queue
-          </a>
-          .
+            Queue
+          </a>{" "}
+          or{" "}
+          <a className="underline" href="/calendar">
+            Calendar
+          </a>{" "}
+          backlog.
         </div>
       )}
 
